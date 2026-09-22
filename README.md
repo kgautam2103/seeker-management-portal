@@ -2,11 +2,12 @@
 
 > **"No seeker is ever lost."**
 
-A Progressive Web App for capturing every seeker, recording attendance, and running timely follow-up across email and messaging — for coordinators and volunteer instructors.
+A Progressive Web App for the Sahaja Yoga volunteer community: capture every seeker once, record attendance, and run timely follow-up across email and messaging — for volunteer coordinators, instructors, and regional coordinators.
 
 ## Documents
 
-- [Product Requirements (PRD)](docs/PRD.md) — vision, users, requirements F1–F11, PWA platform requirements, data model, open questions
+- [Product Requirements (PRD)](docs/PRD.md) — v0.2: vision, problem, personas, requirements R1–R15, NFRs, data model, decisions, open questions
+  - Review copy: [Google Doc](https://docs.google.com/document/d/1N0fkrvUVUes5--Y7oF8G9fnje1pyLR_ThL0Ke8Bt16s/edit)
 - [Implementation Plan](docs/IMPLEMENTATION_PLAN.md) — three phases: Capture → Communicate → Anticipate
 
 ## Status
