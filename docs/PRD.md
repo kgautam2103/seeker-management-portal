@@ -67,7 +67,7 @@ Grouped by capability. Phase numbers reference the [Implementation Plan](IMPLEME
 |---|---|---|---|
 | **R1** | **Seeker intake form** — short, mobile-first form used by a volunteer or instructor (optionally by the seeker via QR/shared tablet). Fields: name, phone/email, city/area, how they heard of us, first session date, center/session. | < 60 s on a phone; works offline and syncs later; warns on likely duplicates; consent statement shown at intake; no field so strict a rushed volunteer gets stuck. | 1 |
 | **R2** | **Historical import** — import existing seekers from CSV/XLSX using a published standard template. | Validates and normalizes name/email/phone/center/date; dedupes by email or phone; uncertain rows go to a review queue, never silently merged. | 1 |
-| **R3** | **Eventbrite sync** — pull registrations for linked Eventbrite events. | Scheduled sync + webhook; each event mapped to a program; new vs returning flagged; visible within 15 min. | 1 |
+| **R3** | **Eventbrite sync** — pull registrations for linked Eventbrite events. | Scheduled sync + webhook; each event mapped to a dated session (and so its program); new vs returning flagged; visible within 15 min. | 1 |
 | **R4** | **Center & session directory** — centers, locations, regular session times; each seeker has a home center. | Follow-ups and access route to the right local volunteer; seekers can be reassigned to a better-fit center/session. | 1 |
 
 ### B. Sessions & attendance
@@ -140,11 +140,11 @@ Multi-language UI (data model localization-ready from v1) · seeker self-service
 
 | Entity | Purpose |
 |---|---|
-| Seeker | Person record; unique by email/phone; home center; consent source, timestamp, and preferences |
+| Seeker | Person record; unique by email/phone; home center (optional until assigned); mentor; consent source, timestamp, and preferences |
 | Center | Location, regular session times, assigned volunteers |
 | Program | Weekly or public; belongs to a center; owns sessions and an audience |
 | Session | Dated occurrence of a program; instructor; roster |
-| Registration | Seeker ↔ Program; source = intake, import, or Eventbrite |
+| Registration | Seeker ↔ Program, plus the session when known (Eventbrite); source = intake, import, or Eventbrite |
 | Attendance / Remark | Per seeker per session |
 | Testimonial | Seeker-submitted; moderation status |
 | User | Admin, Regional Coordinator, Volunteer Coordinator, or Instructor; center scope |

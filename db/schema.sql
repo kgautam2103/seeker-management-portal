@@ -124,18 +124,26 @@ create or replace function visible_center_ids() returns setof uuid language sql 
    where ra.user_id = current_app_user_id() and ra.role = 'regional_coordinator'
 $$;
 
+-- True when the current user may see rows scoped to this center. Null = unassigned, admin-only.
+create or replace function center_visible(c uuid) returns boolean language sql stable as $$
+  select c in (select visible_center_ids()) or (c is null and is_admin())
+$$;
+
 -- ============================================================
 -- Seekers
 -- ============================================================
 create table seeker (
   id                  uuid primary key default gen_random_uuid(),
-  home_center_id      uuid not null references center(id),
+  home_center_id      uuid references center(id),               -- null = not yet assigned; admin-only until set
   full_name           text not null,
   email               citext,
   phone_e164          text check (phone_e164 ~ '^\+[1-9][0-9]{6,14}$'),
   city                text,
   locale              text,
   how_heard           text,
+  mentor_name         text,
+  mentor_email        citext,
+  mentor_user_id      uuid references app_user(id),           -- set when mentor_email matches a user
   first_session_at    date,
   source              record_source_t not null,
   stage               seeker_stage_t not null default 'new',
@@ -156,6 +164,7 @@ create unique index seeker_phone_uniq on seeker (phone_e164)
 create index seeker_name_trgm     on seeker using gin (full_name gin_trgm_ops);
 create index seeker_center_stage  on seeker (home_center_id, stage);
 create index seeker_last_activity on seeker (last_activity_at);
+create index seeker_mentor        on seeker (mentor_user_id);
 create trigger seeker_updated_at before update on seeker for each row execute function set_updated_at();
 
 create table consent (
@@ -220,6 +229,7 @@ create table registration (
   id             uuid primary key default gen_random_uuid(),
   seeker_id      uuid not null references seeker(id) on delete cascade,
   program_id     uuid not null references program(id),
+  session_id     uuid references session(id),            -- the dated session when registered via Eventbrite
   center_id      uuid not null references center(id),   -- denormalized for RLS
   source         record_source_t not null,
   external_id    text,                                   -- e.g. Eventbrite attendee id
@@ -271,8 +281,7 @@ create table eventbrite_event (
   id                   uuid primary key default gen_random_uuid(),
   connection_id        uuid not null references eventbrite_connection(id) on delete cascade,
   eventbrite_event_id  text not null unique,
-  program_id           uuid not null references program(id),
-  session_id           uuid references session(id),          -- optional: map to one dated session
+  session_id           uuid not null references session(id),  -- each Eventbrite event maps to one dated session
   name                 text,
   starts_at            timestamptz,
   last_synced_at       timestamptz
@@ -387,8 +396,8 @@ create index message_event_msg on message_event (message_id, at);
 create table follow_up_task (
   id            uuid primary key default gen_random_uuid(),
   seeker_id     uuid not null references seeker(id) on delete cascade,
-  center_id     uuid not null references center(id),         -- denormalized for RLS
-  assignee_id   uuid references app_user(id),
+  center_id     uuid references center(id),                  -- denormalized for RLS; null while the seeker is unassigned
+  assignee_id   uuid references app_user(id),                 -- defaults to the seeker's mentor, else a center coordinator
   rule_run_id   uuid references rule_run(id),
   reason        text not null,
   due_at        timestamptz not null,
@@ -493,36 +502,31 @@ create trigger suppression_consent after insert on suppression
 -- ============================================================
 -- Row-level security
 -- ============================================================
--- One center-scope policy for every table that carries a non-null center_id.
+-- One center-scope policy for every table that carries a center_id (null = admin-only).
 do $$
 declare t text;
 begin
-  foreach t in array array['session','registration','attendance','remark','follow_up_task','testimonial','program'] loop
+  foreach t in array array['program','session','registration','attendance','remark','follow_up_task','testimonial','campaign'] loop
     execute format('alter table %I enable row level security', t);
     execute format(
-      'create policy %I on %I for all using (center_id in (select visible_center_ids())) with check (center_id in (select visible_center_ids()))',
+      'create policy %I on %I for all using (center_visible(center_id)) with check (center_visible(center_id))',
       t || '_center_scope', t);
   end loop;
 end $$;
 
 alter table seeker enable row level security;
 create policy seeker_center_scope on seeker for all
-  using      (home_center_id in (select visible_center_ids()))
-  with check (home_center_id in (select visible_center_ids()));
+  using      (center_visible(home_center_id))
+  with check (center_visible(home_center_id));
 
 alter table consent enable row level security;
 create policy consent_via_seeker on consent for all
   using (seeker_id in (select id from seeker));   -- seeker is already RLS-filtered
 
-alter table campaign enable row level security;
-create policy campaign_scope on campaign for all
-  using      (center_id in (select visible_center_ids()) or (center_id is null and is_admin()))
-  with check (center_id in (select visible_center_ids()) or (center_id is null and is_admin()));
-
 alter table message enable row level security;
 create policy message_scope on message for all
-  using      (center_id in (select visible_center_ids()) or user_id = current_app_user_id() or is_admin())
-  with check (center_id in (select visible_center_ids()) or user_id = current_app_user_id() or is_admin());
+  using      (center_visible(center_id) or user_id = current_app_user_id())
+  with check (center_visible(center_id) or user_id = current_app_user_id());
 
 alter table message_event enable row level security;
 create policy message_event_via_message on message_event for all

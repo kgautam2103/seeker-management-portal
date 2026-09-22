@@ -63,6 +63,20 @@ do $$ begin
   raise notice 'PASS: row-level security scopes seekers by center';
 end $$;
 
+-- RLS: a seeker with no center yet is visible to admins only.
+do $$ begin
+  perform set_config('app.user_id', '00000000-0000-0000-0000-000000000099', false);
+  insert into seeker (id, full_name, email, city, source)
+    values ('00000000-0000-0000-0000-000000000032', 'Unassigned Example', 'unassigned@example.com', 'Nowhere', 'import');
+  perform set_config('app.user_id', '00000000-0000-0000-0000-000000000021', false);
+  assert (select count(*) from seeker where id = '00000000-0000-0000-0000-000000000032') = 0,
+    'FAIL: unassigned seeker visible to a center coordinator';
+  perform set_config('app.user_id', '00000000-0000-0000-0000-000000000099', false);
+  assert (select count(*) from seeker where id = '00000000-0000-0000-0000-000000000032') = 1,
+    'FAIL: unassigned seeker not visible to admin';
+  raise notice 'PASS: unassigned seekers are admin-only until a center is set';
+end $$;
+
 -- RLS: other-center coordinator cannot insert into center one.
 do $$ begin
   perform set_config('app.user_id', '00000000-0000-0000-0000-000000000022', false);

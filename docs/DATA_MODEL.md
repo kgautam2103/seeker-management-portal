@@ -1,6 +1,6 @@
 # Data Model — Seeker Management Portal
 
-**Status:** Draft v0.1 — direction approved by KG, 2026-09-22 · **Target:** PostgreSQL 15+ (Supabase or Neon) · **DDL:** [`db/schema.sql`](../db/schema.sql) (first pass, not yet applied anywhere)
+**Status:** Draft v0.2 — direction approved by KG, 2026-09-22; decisions on regions, Eventbrite mapping, mentors, and unassigned seekers applied same day · **Target:** PostgreSQL 15+ (Supabase or Neon) · **DDL:** [`db/schema.sql`](../db/schema.sql) (first pass, not yet applied anywhere)
 **Companion to:** [PRD.md](PRD.md) (R1–R15) and [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 
 -----
@@ -214,7 +214,7 @@ Field lists are complete for the first pass; types follow the DDL. `center_id` m
 
 | Table | Fields | Notes |
 |---|---|---|
-| `seeker` | `id`, `home_center_id`, `full_name`, `email`, `phone_e164`, `city`, `locale`, `how_heard`, `first_session_at`, `source` (`intake` / `import` / `eventbrite`), `stage` (`new` / `engaged` / `regular` / `lapsed`), `stage_changed_at`, `last_activity_at`, `merged_into_id`, `anonymized_at`, `client_mutation_id`, `created_by`, `created_at`, `updated_at` | One `full_name` field — no first/last split (localization NFR). Phone stored E.164 and check-constrained. At least one of email/phone required unless anonymized. `stage` is derived (§6). |
+| `seeker` | `id`, `home_center_id` (nullable), `full_name`, `email`, `phone_e164`, `city`, `locale`, `how_heard`, `mentor_name`, `mentor_email`, `mentor_user_id`, `first_session_at`, `source` (`intake` / `import` / `eventbrite`), `stage` (`new` / `engaged` / `regular` / `lapsed`), `stage_changed_at`, `last_activity_at`, `merged_into_id`, `anonymized_at`, `client_mutation_id`, `created_by`, `created_at`, `updated_at` | One `full_name` field — no first/last split (localization NFR). Phone stored E.164 and check-constrained. At least one of email/phone required unless anonymized. `home_center_id` may be null (center unknown yet) — such seekers are visible to admins only until assigned. A mentor is the volunteer who personally guides the seeker; `mentor_user_id` is set when `mentor_email` matches a user and becomes the default assignee for follow-up tasks (R7). `stage` is derived (§6). |
 | `consent` | `id`, `seeker_id`, `channel`, `status` (`granted` / `withdrawn`), `source`, `text_version`, `recorded_by`, `at` | Append-only; the current consent for a channel is the latest row. `text_version` records which consent statement the seeker saw. |
 | `duplicate_candidate` | `seeker_a`, `seeker_b`, `score`, `reason`, `resolution` (`pending` / `merged` / `distinct`), `resolved_by`, `resolved_at` | Review queue for fuzzy matches (name trigram, same phone different email, etc.). `seeker_a < seeker_b` prevents mirrored pairs. |
 
@@ -224,11 +224,11 @@ Field lists are complete for the first pass; types follow the DDL. `center_id` m
 |---|---|---|
 | `program` | `id`, `center_id`, `kind` (`weekly` / `public` / `intro`), `name`, `description`, `default_weekday`, `default_start_time`, `is_active` | A program owns sessions and defines an audience for R8. |
 | `session` | `id`, `program_id`, `center_id` *(denorm)*, `starts_at`, `ends_at`, `location`, `instructor_id`, `status` (`scheduled` / `held` / `cancelled`), `notes` | Roster = registrations of the program plus anyone marked present. |
-| `registration` | `id`, `seeker_id`, `program_id`, `center_id` *(denorm)*, `source`, `external_id`, `status`, `registered_at` | Unique `(seeker_id, program_id)`; unique `(source, external_id)` makes Eventbrite sync idempotent (R3). |
+| `registration` | `id`, `seeker_id`, `program_id`, `session_id`, `center_id` *(denorm)*, `source`, `external_id`, `status`, `registered_at` | Unique `(seeker_id, program_id)`; unique `(source, external_id)` makes Eventbrite sync idempotent (R3). `session_id` is set for Eventbrite registrations so a `no_show` rule can compare against attendance at that session. |
 | `attendance` | `id`, `session_id`, `seeker_id`, `center_id` *(denorm)*, `status` (`present` / `absent`), `first_visit`, `marked_by`, `marked_at`, `client_mutation_id` | Unique `(session_id, seeker_id)`. Offline-safe. |
 | `remark` | `id`, `seeker_id`, `session_id`, `center_id` *(denorm)*, `author_id`, `body`, `tags`, `client_mutation_id`, `created_at` | Internal-only; never rendered into any message (privacy NFR). |
 | `eventbrite_connection` | `id`, `eventbrite_org_id`, `access_token_enc`, `connected_by`, `connected_at` | Token encrypted by the app before storage. |
-| `eventbrite_event` | `id`, `connection_id`, `eventbrite_event_id` (unique), `program_id`, `session_id`, `name`, `starts_at`, `last_synced_at` | Maps an Eventbrite event to a program and optionally a specific session — see open question 2. |
+| `eventbrite_event` | `id`, `connection_id`, `eventbrite_event_id` (unique), `session_id`, `name`, `starts_at`, `last_synced_at` | Each Eventbrite event maps to exactly one dated `session`; the program follows from the session. Decided 2026-09-22. |
 
 ### 3.4 Communication
 
@@ -246,7 +246,7 @@ Field lists are complete for the first pass; types follow the DDL. `center_id` m
 |---|---|---|
 | `rule` | `id`, `name`, `trigger` (`no_show` / `missed_sessions` / `program_completed` / `inactive_days` / `stage_changed` / `new_seeker`), `conditions` (jsonb), `action` (jsonb), `cooldown_days`, `requires_review`, `center_id`, `is_enabled`, `created_by` | `action` is either `{type: message, template_id}` or `{type: task, assign_to, due_in_days}` — the "prompt a human" half of the vision (R13). |
 | `rule_run` | `id`, `rule_id`, `seeker_id`, `trigger_key`, `outcome` (`message_created` / `task_created` / `skipped_cooldown` / `skipped_suppressed` / `awaiting_review`), `at` | Unique `(rule_id, seeker_id, trigger_key)` — a rule fires once per triggering event (e.g. per missed session). |
-| `follow_up_task` | `id`, `seeker_id`, `center_id` *(denorm)*, `assignee_id`, `rule_run_id`, `reason`, `due_at`, `status` (`open` / `done` / `dismissed`), `completed_by`, `completed_at` | Volunteer nudges (R7) and rule-created tasks. Powers "due for follow-up" on the center dashboard. |
+| `follow_up_task` | `id`, `seeker_id`, `center_id` *(denorm, nullable)*, `assignee_id`, `rule_run_id`, `reason`, `due_at`, `status` (`open` / `done` / `dismissed`), `completed_by`, `completed_at` | Volunteer nudges (R7) and rule-created tasks. `assignee_id` defaults to the seeker's mentor, else a coordinator of the home center. Powers "due for follow-up" on the center dashboard. |
 | `testimonial` | `id`, `seeker_id`, `program_id`, `center_id`, `body`, `display_name`, `publish_ok`, `status` (`submitted` / `approved` / `rejected` / `published`), `moderated_by`, `moderated_at`, `submitted_at` | Submitted via signed link; moderated by admins (R10). |
 | `import_batch` | `id`, `center_id`, `uploaded_by`, `filename`, `template_version`, counts, `status` | One row per uploaded file (R2). |
 | `import_row` | `id`, `batch_id`, `row_number`, `raw`, `normalized`, `outcome` (`created` / `matched` / `needs_review` / `rejected`), `seeker_id`, `issues`, `resolved_by`, `resolved_at` | Rows needing review are resolved from a queue, never auto-merged. |
@@ -271,21 +271,22 @@ Field lists are complete for the first pass; types follow the DDL. `center_id` m
 
 ## 5. Access control (row-level security)
 
-RLS is enabled on every center-scoped table. Two helper functions do the work:
+RLS is enabled on every center-scoped table. Three helper functions do the work:
 
 - `current_app_user_id()` — reads the session's user id. The DDL reads `current_setting('app.user_id')`; on Supabase, replace the body with `select auth.uid()`.
 - `visible_center_ids()` — the set of centers the current user may see: all centers for `admin`; the user's assigned centers for `volunteer_coordinator` and `instructor`; every center in the region for `regional_coordinator`.
+- `center_visible(center_id)` — true when the center is in that set, **or** when `center_id` is null and the user is an admin. Null means "not assigned yet" (an unassigned seeker, a global campaign) and is deliberately admin-only until someone sets it.
 
 Each scoped table gets one policy of the form:
 
 ```sql
 create policy attendance_center_scope on attendance
   for all
-  using      (center_id in (select visible_center_ids()))
-  with check (center_id in (select visible_center_ids()));
+  using      (center_visible(center_id))
+  with check (center_visible(center_id));
 ```
 
-Exceptions: `campaign` also allows `center_id is null` for admins (global campaigns); `message` also allows rows where `user_id = current_app_user_id()` so instructors see their own reminders; `template`, `rule`, `suppression`, and `audit_log` are admin-only for writes and readable by all authenticated users (suppression must be readable by the sender).
+Exceptions: `message` also allows rows where `user_id = current_app_user_id()` so instructors see their own reminders; `template`, `rule`, `suppression`, and `audit_log` are admin-only for writes and readable by all authenticated users (suppression must be readable by the sender).
 
 A refinement to consider before Phase 3: give `regional_coordinator` access only to aggregate views rather than raw seeker rows, matching the PRD's "exportable without raw-data access".
 
@@ -319,24 +320,30 @@ A refinement to consider before Phase 3: give `regional_coordinator` access only
 
 -----
 
-## 9. Open questions
+## 9. Decisions (KG, 2026-09-22)
 
-1. Can a center belong to more than one region? The model assumes no (`center.region_id`, single).
-2. Does an Eventbrite event map to a `program` or to a specific `session`? Both are allowed today (`eventbrite_event.session_id` nullable); picking one simplifies the sync.
-3. Retention window length and whether "active" for retention includes opened messages or only attendance.
-4. Should regional coordinators be limited to aggregate views from Phase 1, or is raw read access acceptable until Phase 3?
+1. A center belongs to exactly one region (`center.region_id`).
+2. An Eventbrite event maps to one dated `session` (`eventbrite_event.session_id`, not null); the program follows from the session, and the registration records the session so no-shows can be detected.
+3. A seeker's home center is optional at capture and import. Unassigned seekers are admin-only until a center is set; the import defaults a blank center to the batch's center when one is given.
+4. Mentors are modeled on the seeker (`mentor_name`, `mentor_email`, `mentor_user_id`) and are the default assignee for follow-up tasks.
+5. Historical import records consent as granted by default for email and messages (see [IMPORT_TEMPLATE.md](IMPORT_TEMPLATE.md)); one-click unsubscribe remains available on every send.
 
-## 10. Requirement coverage
+## 10. Open questions
+
+1. Retention window length and whether "active" for retention includes opened messages or only attendance.
+2. Should regional coordinators be limited to aggregate views from Phase 1, or is raw read access acceptable until Phase 3?
+
+## 11. Requirement coverage
 
 | Requirement | Tables |
 |---|---|
 | R1 Intake form | `seeker`, `consent`, `duplicate_candidate` |
 | R2 Historical import | `import_batch`, `import_row`, `seeker`, `duplicate_candidate` |
-| R3 Eventbrite sync | `eventbrite_connection`, `eventbrite_event`, `registration` |
+| R3 Eventbrite sync | `eventbrite_connection`, `eventbrite_event` → `session`, `registration.session_id` |
 | R4 Center & session directory | `region`, `center`, `program`, `session` |
 | R5 Attendance & remarks | `attendance`, `remark` |
 | R6 Instructor reminders | `message` (user recipient), `push_subscription`, `session` |
-| R7 Volunteer follow-up nudges | `follow_up_task`, `message` |
+| R7 Volunteer follow-up nudges | `follow_up_task`, `seeker.mentor_user_id`, `message` |
 | R8 Weekly program comms | `program`, `registration`, `template`, `campaign`, `message` |
 | R9 Public program invitations | `campaign.audience`, `message`, `suppression` |
 | R10 Testimonials | `testimonial` |

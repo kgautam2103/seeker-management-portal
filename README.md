@@ -14,7 +14,7 @@ A Progressive Web App for the Sahaja Yoga volunteer community: capture every see
 
 ## Status
 
-Requirements drafted; data model approved (v0.1). Stack not yet chosen (proposal in the implementation plan).
+Requirements drafted; data model approved (v0.2). Stack not yet chosen (proposal in the implementation plan).
 
 ## Structure
 
