@@ -9,10 +9,12 @@ A Progressive Web App for the Sahaja Yoga volunteer community: capture every see
 - [Product Requirements (PRD)](docs/PRD.md) — v0.2: vision, problem, personas, requirements R1–R15, NFRs, data model, decisions, open questions
   - Review copy: [Google Doc](https://docs.google.com/document/d/1N0fkrvUVUes5--Y7oF8G9fnje1pyLR_ThL0Ke8Bt16s/edit)
 - [Implementation Plan](docs/IMPLEMENTATION_PLAN.md) — three phases: Capture → Communicate → Anticipate
+- [Data Model](docs/DATA_MODEL.md) — entities, ERDs, constraints, RLS, derived data; DDL in [db/schema.sql](db/schema.sql)
+- [Import Template](docs/IMPORT_TEMPLATE.md) — columns and rules for the historical seeker upload (R2); CSV in [docs/assets](docs/assets/seeker-import-template.csv)
 
 ## Status
 
-Requirements drafted. Stack not yet chosen (proposal in the implementation plan).
+Requirements drafted; data model approved (v0.1). Stack not yet chosen (proposal in the implementation plan).
 
 ## Structure
 
