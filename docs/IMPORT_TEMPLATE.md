@@ -1,8 +1,8 @@
 # Seeker Import Template (R2)
 
-**Status:** v1.4 (KG decisions applied 2026-09-22/23) · **File:** [`assets/seeker-import-template.csv`](assets/seeker-import-template.csv) (header row + two synthetic example rows) · **Format:** CSV or XLSX, UTF-8, one seeker per row, first row = headers exactly as below.
+**Status:** v1.5 (KG decisions applied 2026-09-22/23) · **Source:** the existing Google Sheet (~30,000 rows) · **File:** [`assets/seeker-import-template.csv`](assets/seeker-import-template.csv) (header row + two synthetic example rows) · **Format:** CSV or XLSX, UTF-8, one seeker per row, first row = headers exactly as below.
 
-The import tool validates and normalizes every row, deduplicates against existing seekers by email or phone, and sends anything uncertain to a review queue. It never silently merges. See [DATA_MODEL.md](DATA_MODEL.md) §3.2 and §3.5 for where each column lands.
+The importer reads the Google Sheet directly (share it with the importer's service account as Viewer) or an exported CSV/XLSX. Large sheets run as a background job in chunks; progress and outcomes appear in the batch view. The import tool validates and normalizes every row, deduplicates against existing seekers by email or phone, and sends anything uncertain to a review queue. It never silently merges. See [DATA_MODEL.md](DATA_MODEL.md) §3.2 and §3.5 for where each column lands.
 
 ## Columns (19)
 
@@ -28,7 +28,7 @@ The import tool validates and normalizes every row, deduplicates against existin
 | 18 | `mentor_email` | No | Email | `seeker.mentor_email`, `seeker.mentor_user_id` | If it matches an existing portal user, the mentor is linked and becomes the default assignee for follow-up tasks. Otherwise stored as text and flagged for later linking. |
 | 19 | `notes` | No | Free text | `remark` (internal) | Never rendered into any message. |
 
-Consent recorded from an import carries `source = import:<batch_id>` and `text_version = legacy-import`, with the import date as its timestamp. The default of *yes* reflects that these seekers gave their details for follow-up before the portal existed; every message still carries one-click unsubscribe, and any `no` here is honored immediately.
+No written consent is collected today (decision 2026-09-23), so the two consent columns record **known opt-outs only**. Consent rows written by the import carry `source = import:<batch_id>` with a null `text_version` and the import date as timestamp. The default of *yes* reflects that these seekers gave their details for follow-up; every message still carries one-click unsubscribe or STOP, and any `no` here is honored immediately. SMS additionally requires the Phase 2 opt-in before marketing texts are sent.
 
 ## Row outcomes
 

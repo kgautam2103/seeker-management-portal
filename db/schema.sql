@@ -32,6 +32,8 @@ create type task_status_t          as enum ('open','done','dismissed');
 create type testimonial_status_t   as enum ('submitted','approved','rejected','published');
 create type import_outcome_t       as enum ('created','matched','needs_review','rejected');
 create type duplicate_resolution_t as enum ('pending','merged','distinct');
+create type media_kind_t           as enum ('text','video');
+create type import_source_t        as enum ('csv','xlsx','google_sheet');
 
 -- ============================================================
 -- Helpers
@@ -176,7 +178,7 @@ create table consent (
   channel       channel_t not null,
   status        consent_status_t not null,
   source        text not null,      -- intake_form | eventbrite | import:<batch_id> | unsubscribe_link | stop_reply | suppression:<reason>
-  text_version  text,               -- version of the consent statement shown to the seeker
+  text_version  text,               -- version of the written consent statement shown; null while none is shown (current policy)
   recorded_by   uuid references app_user(id),
   at            timestamptz not null default now()
 );
@@ -272,17 +274,20 @@ create index remark_seeker_time on remark (seeker_id, created_at desc);
 -- ============================================================
 -- Eventbrite
 -- ============================================================
-create table eventbrite_connection (
+-- One private API key (held in server configuration, never in the database) grants access to several organizations.
+create table eventbrite_org (
   id                 uuid primary key default gen_random_uuid(),
   eventbrite_org_id  text not null unique,
-  access_token_enc   bytea not null,                         -- encrypted by the app; never plaintext
-  connected_by       uuid references app_user(id),
-  connected_at       timestamptz not null default now()
+  name               text,
+  default_center_id  uuid references center(id),             -- where attendees land when the event gives no better signal
+  region_id          uuid references region(id),
+  last_synced_at     timestamptz,                            -- backfill/sync checkpoint per organization
+  created_at         timestamptz not null default now()
 );
 
 create table eventbrite_event (
   id                   uuid primary key default gen_random_uuid(),
-  connection_id        uuid not null references eventbrite_connection(id) on delete cascade,
+  org_id               uuid not null references eventbrite_org(id) on delete cascade,
   eventbrite_event_id  text not null unique,
   session_id           uuid not null references session(id),  -- each Eventbrite event maps to one dated session
   name                 text,
@@ -340,7 +345,7 @@ create table rule (
   conditions       jsonb not null default '{}',
   action           jsonb not null,   -- {"type":"message","template_id":...} | {"type":"task","assign_to":"home_center_coordinator","due_in_days":3}
   cooldown_days    int not null default 14,
-  requires_review  boolean not null default true,
+  requires_review  boolean not null default false,  -- review is decided by template approval; this is a per-rule override
   center_id        uuid references center(id),               -- null = applies to all centers
   is_enabled       boolean not null default false,
   created_by       uuid references app_user(id),
@@ -417,13 +422,16 @@ create table testimonial (
   seeker_id     uuid references seeker(id) on delete set null,
   program_id    uuid references program(id),
   center_id     uuid not null references center(id),
-  body          text not null,
+  media_kind    media_kind_t not null default 'text',
+  body          text,                                         -- text testimonial
+  video_url     text,                                         -- link on the community's YouTube channel; no media stored here
   display_name  text,
   publish_ok    boolean not null default false,
   status        testimonial_status_t not null default 'submitted',
   moderated_by  uuid references app_user(id),
   moderated_at  timestamptz,
-  submitted_at  timestamptz not null default now()
+  submitted_at  timestamptz not null default now(),
+  constraint testimonial_has_content check (body is not null or video_url is not null)
 );
 
 -- ============================================================
@@ -433,7 +441,9 @@ create table import_batch (
   id                uuid primary key default gen_random_uuid(),
   center_id         uuid references center(id),
   uploaded_by       uuid not null references app_user(id),
-  filename          text not null,
+  source_kind       import_source_t not null default 'csv',
+  source_ref        text,                                   -- Google Sheet id/URL or uploaded file path
+  filename          text,
   template_version  text not null,
   row_count         int not null default 0,
   created_count     int not null default 0,

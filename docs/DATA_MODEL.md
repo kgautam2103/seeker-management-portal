@@ -1,6 +1,6 @@
 # Data Model — Seeker Management Portal
 
-**Status:** v1.0 — approved by KG (2026-09-22/23); final for the Phase 1 build. Later changes arrive as incremental migrations and are reflected here. · **Target:** PostgreSQL 15+ (Supabase or Neon) · **DDL:** [`db/schema.sql`](../db/schema.sql) (first pass, not yet applied anywhere)
+**Status:** v1.1 — v1.0 approved by KG (2026-09-22/23); v1.1 applies the 2026-09-23 answers (Eventbrite organizations, Google Sheet import, testimonial videos, AI review policy, consent posture). Final for the Phase 1 build; later changes arrive as incremental migrations and are reflected here. · **Target:** PostgreSQL 15+ (Supabase or Neon) · **DDL:** [`db/schema.sql`](../db/schema.sql) (first pass, not yet applied anywhere)
 **Companion to:** [PRD.md](PRD.md) (R1–R15) and [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 
 -----
@@ -205,7 +205,7 @@ erDiagram
   }
 ```
 
-`SUPPRESSION` intentionally has no foreign key to `SEEKER` — see principle 3. Not drawn: `push_subscription`, `duplicate_candidate`, `eventbrite_connection`, `import_batch`/`import_row`, `audit_log`. All are defined below and in the DDL.
+`SUPPRESSION` intentionally has no foreign key to `SEEKER` — see principle 3. Not drawn: `push_subscription`, `duplicate_candidate`, `eventbrite_org`, `import_batch`/`import_row`, `audit_log`. All are defined below and in the DDL.
 
 -----
 
@@ -228,7 +228,7 @@ Field lists are complete for the first pass; types follow the DDL. `center_id` m
 | Table | Fields | Notes |
 |---|---|---|
 | `seeker` | `id`, `home_center_id` (nullable), `full_name`, `email`, `phone_e164`, `city`, `state`, `country_code`, `locale`, `how_heard`, `mentor_name`, `mentor_email`, `mentor_user_id`, `first_session_at`, `source` (`intake` / `import` / `eventbrite`), `stage` (`new` / `engaged` / `regular` / `lapsed`), `stage_changed_at`, `last_activity_at`, `merged_into_id`, `anonymized_at`, `client_mutation_id`, `created_by`, `created_at`, `updated_at` | One `full_name` field — no first/last split (localization NFR). Phone stored E.164 and check-constrained; `country_code` (ISO-2) defaults from the home center and drives phone normalization. `state` is the 2-letter USPS code for US seekers (check-constrained; city and state are mandatory for US records at intake and import) and a free-text province/region elsewhere. At least one of email/phone required unless anonymized. `home_center_id` may be null (center unknown yet) — such seekers are visible to admins only until assigned. A mentor is the volunteer who personally guides the seeker; `mentor_user_id` is set when `mentor_email` matches a user and becomes the default assignee for follow-up tasks (R7). `stage` is derived (§6). |
-| `consent` | `id`, `seeker_id`, `channel`, `status` (`granted` / `withdrawn`), `source`, `text_version`, `recorded_by`, `at` | Append-only; the current consent for a channel is the latest row. `text_version` records which consent statement the seeker saw. |
+| `consent` | `id`, `seeker_id`, `channel`, `status` (`granted` / `withdrawn`), `source`, `text_version`, `recorded_by`, `at` | Append-only; the current consent for a channel is the latest row. `text_version` is null while no written statement is shown (current policy, decision 2026-09-23) and records the statement version once one is introduced. |
 | `duplicate_candidate` | `seeker_a`, `seeker_b`, `score`, `reason`, `resolution` (`pending` / `merged` / `distinct`), `resolved_by`, `resolved_at` | Review queue for fuzzy matches (name trigram, same phone different email, etc.). `seeker_a < seeker_b` prevents mirrored pairs. |
 
 ### 3.3 Programs & attendance
@@ -240,14 +240,14 @@ Field lists are complete for the first pass; types follow the DDL. `center_id` m
 | `registration` | `id`, `seeker_id`, `program_id`, `session_id`, `center_id` *(denorm)*, `source`, `external_id`, `status`, `registered_at` | Unique `(seeker_id, program_id)`; unique `(source, external_id)` makes Eventbrite sync idempotent (R3). `session_id` is set for Eventbrite registrations so a `no_show` rule can compare against attendance at that session. |
 | `attendance` | `id`, `session_id`, `seeker_id`, `center_id` *(denorm)*, `status` (`present` / `absent`), `first_visit`, `marked_by`, `marked_at`, `client_mutation_id` | Unique `(session_id, seeker_id)`. Offline-safe. |
 | `remark` | `id`, `seeker_id`, `session_id`, `center_id` *(denorm)*, `author_id`, `body`, `tags`, `client_mutation_id`, `created_at` | Internal-only; never rendered into any message (privacy NFR). |
-| `eventbrite_connection` | `id`, `eventbrite_org_id`, `access_token_enc`, `connected_by`, `connected_at` | Token encrypted by the app before storage. |
-| `eventbrite_event` | `id`, `connection_id`, `eventbrite_event_id` (unique), `session_id`, `name`, `starts_at`, `last_synced_at` | Each Eventbrite event maps to exactly one dated `session`; the program follows from the session. Decided 2026-09-22. |
+| `eventbrite_org` | `id`, `eventbrite_org_id` (unique), `name`, `default_center_id`, `region_id`, `last_synced_at` | One row per Eventbrite organization the shared API key can access. The key itself lives in server environment variables, never the database. `default_center_id` is where attendees land when the event gives no better signal; `last_synced_at` is the backfill/sync checkpoint. |
+| `eventbrite_event` | `id`, `org_id`, `eventbrite_event_id` (unique), `session_id`, `name`, `starts_at`, `last_synced_at` | Each Eventbrite event maps to exactly one dated `session`; the program follows from the session. Decided 2026-09-22. |
 
 ### 3.4 Communication
 
 | Table | Fields | Notes |
 |---|---|---|
-| `template` | `id`, `channel`, `name`, `subject`, `body`, `variables`, `version`, `approved_by`, `approved_at`, `is_active` | Unique `(name, version)`. AI drafts must reference an approved template (R13). |
+| `template` | `id`, `channel`, `name`, `subject`, `body`, `variables`, `version`, `approved_by`, `approved_at`, `is_active` | Unique `(name, version)`. `approved_at` is the review gate: an LLM draft from an approved template sends without review; from a new or changed (unapproved) template it waits in the review queue (decision 2026-09-23). |
 | `campaign` | `id`, `center_id`, `region_id`, `template_id`, `name`, `audience` (jsonb), `scheduled_at`, `status`, `created_by` | `audience` is a segment definition (program history, attendance, recency, center) resolved to recipients at send time (R9). `center_id` null = regional/global. |
 | `message` | `id`, `seeker_id` *or* `user_id` (exactly one), `center_id`, `channel`, `template_id`, `campaign_id`, `rule_run_id`, `to_address`, `subject`, `body_rendered`, `generated_by` (`template` / `llm`), `generation_meta`, `review_status` (`not_required` / `pending` / `approved` / `rejected`), `reviewer_id`, `reviewed_at`, `status` (`draft` / `queued` / `suppressed` / `sent` / `delivered` / `bounced` / `failed`), `provider`, `provider_message_id`, `sent_at` | One table for seeker communications (R8–R10), instructor reminders (R6), and volunteer nudges (R7). An AI draft is simply a message with `review_status = pending`; the review queue is a filter. |
 | `message_event` | `id`, `message_id`, `event` (`queued` / `sent` / `delivered` / `opened` / `clicked` / `bounced` / `complained` / `failed`), `at`, `payload` | Provider webhooks land here; the deliverability dashboard aggregates it (R12). |
@@ -257,11 +257,11 @@ Field lists are complete for the first pass; types follow the DDL. `center_id` m
 
 | Table | Fields | Notes |
 |---|---|---|
-| `rule` | `id`, `name`, `trigger` (`no_show` / `missed_sessions` / `program_completed` / `inactive_days` / `stage_changed` / `new_seeker`), `conditions` (jsonb), `action` (jsonb), `cooldown_days`, `requires_review`, `center_id`, `is_enabled`, `created_by` | `action` is either `{type: message, template_id}` or `{type: task, assign_to, due_in_days}` — the "prompt a human" half of the vision (R13). |
+| `rule` | `id`, `name`, `trigger` (`no_show` / `missed_sessions` / `program_completed` / `inactive_days` / `stage_changed` / `new_seeker`), `conditions` (jsonb), `action` (jsonb), `cooldown_days`, `requires_review`, `center_id`, `is_enabled`, `created_by` | `action` is either `{type: message, template_id}` or `{type: task, assign_to, due_in_days}` — the "prompt a human" half of the vision (R13). `requires_review` defaults to false; the template's approval state decides review, with this flag as a per-rule override. |
 | `rule_run` | `id`, `rule_id`, `seeker_id`, `trigger_key`, `outcome` (`message_created` / `task_created` / `skipped_cooldown` / `skipped_suppressed` / `awaiting_review`), `at` | Unique `(rule_id, seeker_id, trigger_key)` — a rule fires once per triggering event (e.g. per missed session). |
 | `follow_up_task` | `id`, `seeker_id`, `center_id` *(denorm, nullable)*, `assignee_id`, `rule_run_id`, `reason`, `due_at`, `status` (`open` / `done` / `dismissed`), `completed_by`, `completed_at` | Volunteer nudges (R7) and rule-created tasks. `assignee_id` defaults to the seeker's mentor, else a coordinator of the home center. Powers "due for follow-up" on the center dashboard. |
-| `testimonial` | `id`, `seeker_id`, `program_id`, `center_id`, `body`, `display_name`, `publish_ok`, `status` (`submitted` / `approved` / `rejected` / `published`), `moderated_by`, `moderated_at`, `submitted_at` | Submitted via signed link; moderated by admins (R10). |
-| `import_batch` | `id`, `center_id`, `uploaded_by`, `filename`, `template_version`, counts, `status` | One row per uploaded file (R2). |
+| `testimonial` | `id`, `seeker_id`, `program_id`, `center_id`, `media_kind` (`text` / `video`), `body`, `video_url`, `display_name`, `publish_ok`, `status` (`submitted` / `approved` / `rejected` / `published`), `moderated_by`, `moderated_at`, `submitted_at` | Submitted via signed link; moderated by admins (R10, Phase 3). Videos are hosted on the community's YouTube channel and referenced by `video_url`; the portal never stores media. |
+| `import_batch` | `id`, `center_id`, `uploaded_by`, `source_kind` (`csv` / `xlsx` / `google_sheet`), `source_ref`, `filename`, `template_version`, counts, `status` | One row per import run (R2). `source_ref` holds the Google Sheet id or file path; the ~30,000 historical rows arrive as one or more batches processed in chunks. |
 | `import_row` | `id`, `batch_id`, `row_number`, `raw`, `normalized`, `outcome` (`created` / `matched` / `needs_review` / `rejected`), `seeker_id`, `issues`, `resolved_by`, `resolved_at` | Rows needing review are resolved from a queue, never auto-merged. |
 | `audit_log` | `id`, `actor_id`, `action`, `entity_type`, `entity_id`, `center_id`, `metadata`, `at` | Written for exports, merges, anonymizations, bulk sends, role changes. |
 
@@ -325,7 +325,7 @@ A refinement to consider before Phase 3: give `regional_coordinator` access only
 
 ## 8. Privacy operations
 
-- **Consent at capture:** the intake form writes a `consent` row per channel with the `text_version` shown.
+- **Consent at capture:** the intake form writes a `consent` row per channel with `source = intake`; `text_version` stays null until a written statement is introduced (decision 2026-09-23).
 - **Unsubscribe / STOP / bounce:** inserts into `suppression`, which cascades to `consent`. Nothing else needs to remember.
 - **Correction / deletion on request:** an admin action sets `seeker.anonymized_at`, nulls contact and free-text fields, and rewrites `message.to_address` to a hash. Attendance counts survive for reporting; the person does not. Logged in `audit_log`.
 - **Retention:** a scheduled job runs the same anonymization for seekers past the retention window (to be set — open question in the PRD) with no renewed consent.
@@ -340,6 +340,11 @@ A refinement to consider before Phase 3: give `regional_coordinator` access only
 3. A seeker's home center is optional at capture and import. Unassigned seekers are admin-only until a center is set; the import defaults a blank center to the batch's center when one is given.
 4. Mentors are modeled on the seeker (`mentor_name`, `mentor_email`, `mentor_user_id`) and are the default assignee for follow-up tasks.
 5. Historical import records consent as granted by default for email and messages (see [IMPORT_TEMPLATE.md](IMPORT_TEMPLATE.md)); one-click unsubscribe remains available on every send.
+6. Eventbrite access is one private API key with rights over several organizations, held in server configuration; `eventbrite_org` maps each organization to a default center/region, and a backfill job walks every organization and event before ongoing sync begins.
+7. The historical source is a Google Sheet (~30,000 rows); `import_batch.source_kind = google_sheet` reads it directly.
+8. Testimonials (Phase 3) may be text or a link to a video on the community's YouTube channel; no media is stored.
+9. AI drafts from approved templates send without review; new or changed templates gate their drafts into the review queue.
+10. No written consent statement at intake for now: `consent.text_version` stays null; opt-out via `suppression` is unchanged.
 
 ## 10. Open questions
 
@@ -351,15 +356,15 @@ A refinement to consider before Phase 3: give `regional_coordinator` access only
 | Requirement | Tables |
 |---|---|
 | R1 Intake form | `seeker`, `consent`, `duplicate_candidate` |
-| R2 Historical import | `import_batch`, `import_row`, `seeker`, `duplicate_candidate` |
-| R3 Eventbrite sync | `eventbrite_connection`, `eventbrite_event` → `session`, `registration.session_id` |
+| R2 Historical import | `import_batch` (`source_kind = google_sheet`), `import_row`, `seeker`, `duplicate_candidate` |
+| R3 Eventbrite sync | `eventbrite_org`, `eventbrite_event` → `session`, `registration.session_id` |
 | R4 Center & session directory | `region`, `center`, `program`, `session` |
 | R5 Attendance & remarks | `attendance`, `remark` |
 | R6 Instructor reminders | `message` (user recipient), `push_subscription`, `session` |
 | R7 Volunteer follow-up nudges | `follow_up_task`, `seeker.mentor_user_id`, `message` |
 | R8 Weekly program comms | `program`, `registration`, `template`, `campaign`, `message` |
 | R9 Public program invitations | `campaign.audience`, `message`, `suppression` |
-| R10 Testimonials | `testimonial` |
+| R10 Testimonials | `testimonial` (`media_kind`, `video_url`) |
 | R11 Unsubscribe & preferences | `suppression`, `consent` |
 | R12 Delivery monitoring | `message`, `message_event` |
 | R13 Rule engine + AI follow-ups | `rule`, `rule_run`, `message.review_status`, `follow_up_task` |
