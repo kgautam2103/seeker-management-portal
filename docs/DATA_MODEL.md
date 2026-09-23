@@ -1,6 +1,6 @@
 # Data Model — Seeker Management Portal
 
-**Status:** Draft v0.2 — direction approved by KG, 2026-09-22; decisions on regions, Eventbrite mapping, mentors, and unassigned seekers applied same day · **Target:** PostgreSQL 15+ (Supabase or Neon) · **DDL:** [`db/schema.sql`](../db/schema.sql) (first pass, not yet applied anywhere)
+**Status:** v1.0 — approved by KG (2026-09-22/23); final for the Phase 1 build. Later changes arrive as incremental migrations and are reflected here. · **Target:** PostgreSQL 15+ (Supabase or Neon) · **DDL:** [`db/schema.sql`](../db/schema.sql) (first pass, not yet applied anywhere)
 **Companion to:** [PRD.md](PRD.md) (R1–R15) and [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)
 
 -----
@@ -35,6 +35,9 @@ erDiagram
   APP_USER ||--o{ ROLE_ASSIGNMENT : holds
   CENTER ||--o{ ROLE_ASSIGNMENT : scopes
   APP_USER ||--o{ SESSION : instructs
+  APP_USER ||--o{ SEEKER : mentors
+  SESSION ||--o| EVENTBRITE_EVENT : "maps from"
+  SESSION ||--o{ REGISTRATION : "for session"
   REGION {
     uuid id PK
     text name
@@ -62,8 +65,17 @@ erDiagram
     text full_name
     citext email
     text phone_e164
+    text city
+    text state
+    char country_code
+    uuid mentor_user_id FK
     enum stage
     uuid merged_into_id FK
+  }
+  EVENTBRITE_EVENT {
+    uuid id PK
+    text eventbrite_event_id
+    uuid session_id FK
   }
   PROGRAM {
     uuid id PK
@@ -81,6 +93,7 @@ erDiagram
     uuid id PK
     uuid seeker_id FK
     uuid program_id FK
+    uuid session_id FK
     enum source
     text external_id
   }
@@ -192,7 +205,7 @@ erDiagram
   }
 ```
 
-`SUPPRESSION` intentionally has no foreign key to `SEEKER` — see principle 3. Not drawn: `push_subscription`, `duplicate_candidate`, `eventbrite_connection`/`eventbrite_event`, `import_batch`/`import_row`, `audit_log`. All are defined below and in the DDL.
+`SUPPRESSION` intentionally has no foreign key to `SEEKER` — see principle 3. Not drawn: `push_subscription`, `duplicate_candidate`, `eventbrite_connection`, `import_batch`/`import_row`, `audit_log`. All are defined below and in the DDL.
 
 -----
 
