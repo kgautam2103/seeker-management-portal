@@ -158,6 +158,8 @@ Multi-language UI (data model localization-ready from v1) · countries beyond th
 
 **Scale** — ~30,000 seekers on day one; design headroom for tens of thousands more and hundreds of centers across the US without re-architecture.
 
+**Localization readiness** — US-first and English-only in v1, but the data model and field choices assume nothing English-only: one free-text name field (no first/last split), international phone formats (E.164), ISO country codes, free-text region outside the US. Expansion beyond the US must not require schema changes.
+
 **PWA platform** — installable (manifest + service worker); responsive from 360px; offline-first intake and attendance with background sync (last-write-wins with audit); web push for reminders (iOS requires Home Screen install, iOS 16.4+ — part of onboarding); auth via magic link or Google sign-in; roles Admin, Regional Coordinator, Volunteer Coordinator, Instructor; WCAG 2.1 AA for core flows.
 
 -----
@@ -192,7 +194,7 @@ Eventbrite API (one private token with multi-organization access; backfill, sche
 | # | Decision | Date |
 |---|---|---|
 | D1 | PWA, not a native app | 2026-09-22 |
-| D2 | Automated communication to seekers is in scope; personal follow-up remains a human action the system prompts | 2026-09-22 |
+| D2 | Automated communication to seekers is in scope for logistics; personal follow-up remains a human action the system prompts, preserving the community's relationship-first culture | 2026-09-22 |
 | D3 | Custom PWA on managed services rather than no-code assembly (alternatives weighed in v0.1: Google Forms + Sheets + Apps Script, Airtable, Glide) | 2026-09-22 |
 | D4 | **Rollout:** DMV pilot → New York and Texas → all US | 2026-09-23 |
 | D5 | **Historical data:** ~30,000 records in a Google Sheet, imported per the import template | 2026-09-23 |
