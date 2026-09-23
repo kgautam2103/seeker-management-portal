@@ -139,6 +139,7 @@ create table seeker (
   email               citext,
   phone_e164          text check (phone_e164 ~ '^\+[1-9][0-9]{6,14}$'),
   city                text,
+  state               text,                                   -- US: 2-letter USPS code (required with city for US seekers); elsewhere optional province/region
   country_code        char(2),                                -- ISO 3166-1 alpha-2; defaults from the home center
   locale              text,
   how_heard           text,
@@ -156,7 +157,8 @@ create table seeker (
   created_by          uuid references app_user(id),
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now(),
-  constraint seeker_has_contact check (email is not null or phone_e164 is not null or anonymized_at is not null)
+  constraint seeker_has_contact check (email is not null or phone_e164 is not null or anonymized_at is not null),
+  constraint seeker_us_state_code check (country_code is distinct from 'US' or state is null or state ~ '^[A-Z]{2}$')
 );
 create unique index seeker_email_uniq on seeker (email)
   where email is not null and merged_into_id is null and anonymized_at is null;
