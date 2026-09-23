@@ -7,7 +7,6 @@ A Progressive Web App for the Sahaja Yoga volunteer community: capture every see
 ## Documents
 
 - [Product Requirements (PRD)](docs/PRD.md) — v0.3: vision, problem, personas, requirements R1–R15, rollout DMV → NY/TX → US, NFRs, decisions D1–D11
-  - Review copy: [Google Doc](https://docs.google.com/document/d/1N0fkrvUVUes5--Y7oF8G9fnje1pyLR_ThL0Ke8Bt16s/edit)
 - [Implementation Plan](docs/IMPLEMENTATION_PLAN.md) — three phases: Capture → Communicate → Anticipate
 - [Data Model](docs/DATA_MODEL.md) — **v1.0 final**: entities, ERDs, constraints, RLS, derived data; DDL in [db/schema.sql](db/schema.sql), tests in [db/smoke_test.sql](db/smoke_test.sql)
 - [Architecture](docs/ARCHITECTURE.md) — proposed v0.1: decisions AD-1…AD-12, components, key flows, security, environments, cost, phase mapping
