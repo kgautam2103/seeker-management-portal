@@ -1,3 +1,3 @@
-full_name,email,phone,country,city,center,program,first_session_date,last_attended_date,sessions_attended,how_heard,language,consent_email,consent_messages,mentor_name,mentor_email,notes
-Asha Example,asha.example@example.com,+1 202 555 0143,United States,Washington,Arlington Center,Weekly meditation - Tuesday,2025-03-11,2026-08-19,14,Friend,en,yes,yes,Priya Mentor,priya.mentor@example.com,Prefers evening sessions
-Rahul Sample,,+44 7700 900123,GB,London,,Public program - Spring intro,2026-04-05,2026-04-05,1,Eventbrite,en,,no,,,
+full_name,email,phone,country,country_code,city,center,program,first_session_date,last_attended_date,sessions_attended,how_heard,language,consent_email,consent_messages,mentor_name,mentor_email,notes
+Asha Example,asha.example@example.com,+1 202 555 0143,United States,US,Washington,Arlington Center,Weekly meditation - Tuesday,2025-03-11,2026-08-19,14,Friend,en,yes,yes,Priya Mentor,priya.mentor@example.com,Prefers evening sessions
+Rahul Sample,,+44 7700 900123,United Kingdom,,London,,Public program - Spring intro,2026-04-05,2026-04-05,1,Eventbrite,en,,no,,,
