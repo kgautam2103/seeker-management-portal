@@ -32,13 +32,23 @@ A lightweight shared portal lets volunteers, instructors, and coordinators captu
 
 ## 3. Goals & Success Metrics
 
+**Goals** (carried from v0.1)
+
+1. Any volunteer can record a new seeker in under a minute, from a phone, right after a session.
+2. Every new seeker gets a timely, appropriate follow-up — a call, message, or invitation — instead of falling through the cracks.
+3. Volunteers and coordinators see at a glance who is new, who is returning, and who has gone quiet.
+4. Regional coordinators get honest reporting on reach and retention without weeks of manual data-gathering.
+5. Non-technical volunteers can use and maintain the portal without ongoing developer support.
+
+**Success metrics**
+
 | Goal | Metric | Starting target |
 |---|---|---|
 | Capture every seeker | Session attendees with contact info recorded; historical records imported | ≥ 90%; 100% of the ~30k imported, 0 duplicates by email/phone |
 | Frictionless intake | Time to log a new seeker on a phone | < 60 seconds |
 | Timely follow-up | New seekers contacted within 72 h; no-shows/drop-offs contacted within 7 days | ≥ 90% / ≥ 90% |
 | Retention | Seekers attending a 2nd session within 30 days; still active at 90 days | Baseline in Phase 1; improve in Phase 3 |
-| Volunteer adoption | Active centers logging attendance monthly | ≥ 80% |
+| Volunteer adoption | Active centers logging attendance monthly; sessions with attendance recorded | ≥ 80% of centers; ≥ 90% of sessions |
 | Healthy, respectful sending | Bounce / spam-complaint rate; unsubscribe and STOP honored | < 2% / < 0.1%; 100%, immediately |
 
 Targets are starting points, to be refined once a baseline exists.
@@ -49,10 +59,10 @@ Targets are starting points, to be refined once a baseline exists.
 
 | Persona | Who | Needs |
 |---|---|---|
-| **Volunteer Coordinator** (primary) | Local center volunteer managing seeker relationships; on a phone; non-technical; time-constrained | Log seekers fast, see who is due for follow-up, send program communications |
+| **Volunteer Coordinator** (primary) | Local center volunteer who greets newcomers, collects contact details, sends follow-ups, and invites seekers back; on a phone, not a laptop; non-technical; unpaid work on top of a job | Log seekers fast, see who is due for follow-up, send program communications |
 | **Session Instructor** | Leads the session; focused on facilitating, not admin | One-tap attendance, remarks, session reminders |
 | **Regional / National Coordinator** | Oversees many centers; closest to an admin | Rollup of seekers, retention, and sessions per center; identify centers needing support |
-| **Seeker** | Newcomer or returning practitioner; not a portal user | Relevant, timely messages; submit a testimonial; unsubscribe easily. Interacts only via emailed or shared links |
+| **Seeker** | Newcomer or returning practitioner; the subject of records, not a portal user today (self-service is a low-risk future option) | Relevant, timely messages; submit a testimonial; unsubscribe easily. Interacts only via emailed or shared links |
 | **System / Data Steward** | **KG (Kumar Gautam)** — admin, budget owner, and long-term steward; a backup admin to be named | Access control, data privacy, system health, service accounts |
 
 -----
@@ -92,8 +102,8 @@ Grouped by capability. Phase numbers reference the [Implementation Plan](IMPLEME
 
 | ID | Requirement | Acceptance | Phase |
 |---|---|---|---|
-| **R13** | **Rule engine + AI follow-ups** — configurable rules drive follow-up; an LLM personalizes content. | Rule = trigger → condition → action. Triggers: no-show, missed sessions, program completed, inactive N days. Actions: message the seeker **or** create a task for the mentor/volunteer. LLM drafts within admin-approved templates and tone. **Review policy:** drafts from an already-approved template send automatically; drafts from a new or changed template wait in the review queue until an admin approves the template. Cooldowns prevent over-messaging. | 3 |
-| **R14** | **Dashboards & reporting** — center dashboard and regional rollup. | Center: new seekers this week/month, due for follow-up, returning vs lapsed, attendance counts (Phase 1). Regional (DMV, NY, Texas, then all US): seekers per center, retention, sessions, trends; exportable without raw-data access (Phase 3). | 1 / 3 |
+| **R13** | **Rule engine + AI follow-ups** — configurable rules drive follow-up; an LLM personalizes content. | Rule = trigger → condition → action. Triggers: no-show, missed sessions, program completed, inactive N days, journey-stage change (new → engaged → regular → lapsed). Actions: message the seeker **or** create a task for the mentor/volunteer. LLM drafts within admin-approved templates and tone. **Review policy:** drafts from an already-approved template send automatically; drafts from a new or changed template wait in the review queue until an admin approves the template. Cooldowns prevent over-messaging. | 3 |
+| **R14** | **Dashboards & reporting** — center dashboard and regional rollup. | Center: new seekers this week/month, due for follow-up, journey stage (new / engaged / regular / lapsed), attendance counts (Phase 1). Regional (DMV, NY, Texas, then all US): seekers per center, retention, sessions, trends; exportable without raw-data access (Phase 3). | 1 / 3 |
 | **R15** | **Access control** — by role, center, and region. | Volunteers see their own center's seekers; regional coordinators see rollups for centers they oversee; unassigned seekers are admin-only until placed; no public access to personal data. | 1 |
 
 -----
@@ -121,7 +131,7 @@ US-first: English UI, US phone default, state mandatory for US records. The data
 
 ## 8. Future (V2+)
 
-Multi-language UI (data model localization-ready from v1) · countries beyond the US · seeker self-service portal and session self-registration/calendar · cross-region seeker lookup for travelers · program-effectiveness analytics (retention vs instructor, format, time, follow-up speed) · WhatsApp group auto-add for consenting seekers · written consent statement at intake, if introduced.
+Multi-language UI (data model localization-ready from v1) · countries beyond the US · seeker self-service portal (update own details, see attendance history, find a nearby center while traveling) and session self-registration with calendar sync (e.g., Google Calendar) · cross-region seeker lookup for travelers · program-effectiveness analytics (retention vs instructor, format, time, follow-up speed) · WhatsApp group auto-add for consenting seekers · written consent statement at intake, if introduced.
 
 -----
 
@@ -129,15 +139,16 @@ Multi-language UI (data model localization-ready from v1) · countries beyond th
 
 **Privacy & consent (personal data of members of the public)**
 - **Consent posture (decision 2026-09-23):** no written consent statement is shown at intake for now. Consent is implied by a seeker sharing contact details for follow-up and is recorded with its source (intake, import, Eventbrite). A written statement can be introduced later without schema change.
+- **Deferred consent design (from v0.1):** when introduced, a plain-language statement at intake saying what is collected, why (follow-up and program improvement only), how it is used, and how to opt out.
 - **Opt-out is always available:** one-click unsubscribe in every email; STOP on SMS and WhatsApp; honored immediately across channels.
 - **US messaging compliance:** SMS to US numbers falls under TCPA and carrier A2P 10DLC registration, which expect documented opt-in. Phase 2 therefore includes a lightweight SMS opt-in (keyword or checkbox at intake) even though a general written consent is deferred. See risks in the Implementation Plan.
 - Data minimization: name, contact, city/state/country, center/session, mentor. No health data, no ID numbers, no street address.
-- Seekers can request correction or deletion; deletion honored across channels.
+- Seekers can request correction or deletion ("right to be forgotten"); deletion honored across channels. GDPR-like principles apply if the portal ever extends beyond the US.
 - Access limited by role, center, and region; audit log for exports and bulk actions. No third-party sharing or sale.
 - Retention policy: archive or anonymize after a defined period of inactivity (window still to be set).
 - AI-generated content never includes another seeker's data; remarks are internal-only.
 
-**Simplicity & low maintenance** — volunteer-run with no IT staff. Managed services over self-hosting; one-page guides suffice for training; infrequent technical intervention.
+**Simplicity & low maintenance** — volunteer-run with no IT staff. Managed services over self-hosting; one-page guides suffice for training; infrequent technical intervention. Routine administration — adding a center or user, running an import, approving a template, exporting a report — never requires a developer.
 
 **Cost** — funded personally by KG. Start on free tiers; messaging volume is the main cost driver. Estimates for today and one year out are in [ARCHITECTURE.md §9](ARCHITECTURE.md#9-cost-today-and-one-year-out).
 
@@ -182,7 +193,7 @@ Eventbrite API (one private token with multi-organization access; backfill, sche
 |---|---|---|
 | D1 | PWA, not a native app | 2026-09-22 |
 | D2 | Automated communication to seekers is in scope; personal follow-up remains a human action the system prompts | 2026-09-22 |
-| D3 | Custom PWA on managed services rather than no-code assembly | 2026-09-22 |
+| D3 | Custom PWA on managed services rather than no-code assembly (alternatives weighed in v0.1: Google Forms + Sheets + Apps Script, Airtable, Glide) | 2026-09-22 |
 | D4 | **Rollout:** DMV pilot → New York and Texas → all US | 2026-09-23 |
 | D5 | **Historical data:** ~30,000 records in a Google Sheet, imported per the import template | 2026-09-23 |
 | D6 | **Ownership and budget:** KG is admin, budget owner, and long-term steward; start minimal on free tiers | 2026-09-23 |
@@ -199,6 +210,14 @@ Eventbrite API (one private token with multi-organization access; backfill, sche
 3. **Backup admin** — who is the second person with admin access, so the portal never depends on one login?
 4. **Retention window** — how long before an inactive seeker is anonymized?
 5. **YouTube privacy level** — *private* videos are visible only to invited Google accounts; *unlisted* videos are viewable by anyone with the link. If testimonials should be watchable from a portal link, unlisted is the practical setting.
+
+## 14. Document History
+
+| Version | Date | Source | Notes |
+|---|---|---|---|
+| v0.1 | 2026-09-02 | Google Doc (KG) | Original PRD: problem, goals, personas, MVP features, V2 ideas, NFRs, six open questions. Archived verbatim at [archive/PRD-v0.1-2026-09-02.md](archive/PRD-v0.1-2026-09-02.md). |
+| v0.2 | 2026-09-22 | This repo | Merged the handwritten planning notes: requirements R1–R15, PWA only, communications in scope. |
+| v0.3 | 2026-09-23 | This repo | Answers to all open questions: rollout, 30k import, ownership, consent, channels, Eventbrite, AI review, testimonials. Google Doc retired; this file is canonical. |
 
 -----
 
