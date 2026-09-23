@@ -336,3 +336,71 @@ Assumptions (adjust to actuals): 40,000 seekers stored; 6,000 enrolled in weekly
 7. Confirm the one-year cost posture in §9 — messaging-dominated, with channel-per-message-type as the lever.
 
 Everything else in this document follows from the PRD and data model and does not need a separate decision.
+
+-----
+
+## Appendix A — Deep dives
+
+Expanded reasoning for four decisions that carry the most implementation weight. Added 2026-09-23 at KG's request.
+
+### A.1 Inngest (AD-4)
+
+**What it is.** A durable-execution service for code that lives in this repo. Functions are written in TypeScript beside the Next.js code, triggered by events (`inngest.send({ name: "message/queued", data })`) or crons, and composed of `step.run(...)` calls. Inngest's cloud drives execution by calling `/api/inngest` in the app one step at a time and remembering each step's result; a failed step retries alone, and a run interrupted mid-way resumes at the last completed step.
+
+**Why here.** Vercel functions are short-lived, so a 30,000-row import or a backfill across every Eventbrite organization cannot run as one request. Inngest turns those into hundreds of small, checkpointed invocations with no worker servers or queue to operate, and adds crons (Vercel Hobby allows only minimal daily crons), retries with backoff, concurrency and throttling controls, and a dashboard of every run and step with its payload.
+
+**Functions.**
+
+| Function | Trigger | Shape |
+|---|---|---|
+| `eventbrite/backfill` | manual event, once per organization | one step per page of events and per page of attendees; checkpoint `eventbrite_org.last_synced_at` after each event; `throttle` matched to Eventbrite's rate limit; `concurrency: 1` per organization |
+| `eventbrite/sync` | cron every 15 min + webhook event | events/attendees changed since the checkpoint; same per-attendee path |
+| `import/run` | `import/batch.created` | 500-row chunks, one step each: normalize → dedupe → write `import_row`; batch counts updated per step for UI progress |
+| `messages/dispatch` | `message/queued` | idempotency key = `message_id`; re-check suppression; call provider; store `provider_message_id`; retry only on transient provider errors |
+| `rules/evaluate` | nightly cron + `attendance/recorded`, `registration/created`, `seeker/stage.changed` | fan out per matching rule; cooldown and suppression checks; write `rule_run` |
+| `seekers/recompute-stage` | nightly | set `stage`; emit `seeker/stage.changed` |
+| `reminders/schedule` | hourly | sessions starting within the lead window → push, else email/message |
+| `retention/anonymize` | monthly | seekers past the retention window |
+
+Failures go to an `onFailure` handler that writes `audit_log` and reports to Sentry via Inngest's Sentry middleware. Local development uses the Inngest dev server, which discovers functions automatically and shows the same dashboard locally.
+
+**Gotchas.** Every step is an HTTP call to the app, so a step should be a meaningful unit (a page of API results, 500 rows), not one row. Steps must be deterministic given their inputs; side effects belong inside `step.run`. The free tier is sized by monthly runs/steps and is adequate through Phase 2; the first paid tier is the $0–50 line in §9. Fallback with zero extra vendors: Supabase `pg_cron` + Edge Functions, at the cost of hand-written retry and checkpoint logic.
+
+### A.2 Vercel + Sentry (AD-10)
+
+**Vercel.** Native Next.js hosting: App Router, server actions, and route handlers deploy without configuration. Git integration is the delivery pipeline — every push to `main` is a production deploy, every pull request gets a preview URL (useful for showing a coordinator a change before it ships), and environment variables are scoped per environment, which is where every secret lives (AD-12). Custom domain with automatic HTTPS; static assets and the PWA shell served from the edge network; server actions run as serverless functions.
+
+The Hobby plan is free for personal, non-commercial use, which a volunteer community project is. Its constraints shape the design: function execution is capped in the tens of seconds (anything heavy is an Inngest job, never a server action); bandwidth and build minutes are far above this project's needs; crons are minimal (Inngest again); runtime logs are retained only briefly, which is why Sentry is not optional. Pro ($20/month) only if a second developer needs the dashboard.
+
+**Sentry.** `@sentry/nextjs` captures unhandled exceptions and failed requests from the browser (including the service worker and offline sync code), from server actions and route handlers, and — via middleware — from Inngest functions. Source maps are uploaded at build so stack traces point at TypeScript lines; the Vercel integration tags each error with its deployment, so "which deploy broke intake?" is answerable. Alerts by email or Slack. The Developer plan is free with an error quota this portal will not approach.
+
+Two settings are mandatory for a personal-data application: `sendDefaultPii: false` with a `beforeSend` scrub that removes email addresses and phone numbers from breadcrumbs and request bodies, and Session Replay disabled (or mask-all-text if ever enabled). Sentry should say *that* an intake failed and *where*, never *whose*.
+
+### A.3 Offline-first — Serwist + Dexie (AD-8)
+
+**Problem.** A volunteer with one bar of signal must add a seeker or mark attendance in under 60 seconds and trust that it is saved. The app therefore writes locally first and syncs later; the server is eventually consistent with the phone.
+
+**Serwist** (maintained successor of `next-pwa`) generates the service worker and wires it into Next.js: it precaches the app shell — JavaScript, CSS, route skeletons for intake, roster, dashboard — so the app opens offline, and applies runtime caching to pages. With `app/manifest.ts` (name, icons, `display: standalone`, theme color) it makes the portal installable on Android and iOS.
+
+**Dexie** is a typed wrapper over IndexedDB. Tables:
+
+| Table | Holds | Purpose |
+|---|---|---|
+| `outbox` | kind (`seeker` / `attendance` / `remark`), payload, `client_mutation_id`, attempts, last error | every pending write, in order |
+| `rosters` | session → registered seekers | mark attendance offline |
+| `seeker_index` | name, hashed email/phone for the user's centers | offline duplicate warning without a server round-trip |
+| `meta` | last sync time, cached session claims | sync bookkeeping |
+
+**Write path.** Form → zod validation → row appended to `outbox` and shown immediately as saved. A sync routine drains the outbox in order on any of: the browser `online` event, app open/foreground (`visibilitychange`), a periodic timer while open, and — on Android Chrome — the Background Sync API, which lets the service worker retry after the tab is closed. Each item goes to a server action; the server runs `insert … on conflict (client_mutation_id) do nothing`, so a retry after a dropped response never duplicates. 2xx removes the item; a validation error parks it in a "needs attention" list; network or 5xx errors back off and retry.
+
+**Conflicts and dedupe.** Attendance is keyed by `(session, seeker)`, so two instructors marking the same person converge; other conflicts are last-write-wins on `updated_at` with the losing version in `audit_log`. `seeker_index` gives an offline warning; the authoritative dedupe runs server-side at sync and may still create a `duplicate_candidate`.
+
+**Gotchas.** IndexedDB is not encrypted at rest — mitigated by storing minimal fields, purging on logout, and treating the device lock as the boundary (acceptable for name and contact; part of why health and ID data are banned from the schema). Supabase session tokens can expire offline; the outbox holds until the token refreshes on reconnect. iOS Safari has no Background Sync, so sync runs on open, and Safari may evict storage for *non-installed* web apps unused for a week — another reason installation is part of onboarding. Playwright's `context.setOffline(true)` exercises the whole path in CI.
+
+### A.4 Web Push (AD-9)
+
+**How it works.** Web Push is a browser standard, not a vendor. After an instructor grants notification permission inside the installed PWA, the browser returns a subscription — an endpoint at the browser vendor's push service plus two keys — stored in `push_subscription`. The server sends with the `web-push` library: payload encrypted with the subscription keys, request signed with our VAPID key pair. The push service delivers to the device; the service worker's `push` handler shows the notification and `notificationclick` opens the session roster. No Apple or Google developer account; no per-message cost.
+
+**Where it works.** Android Chrome and desktop browsers fully, including with the app closed. iOS only for web apps added to the Home Screen on iOS 16.4 or later — a Safari tab cannot receive push. Hence "Add to Home Screen" in instructor onboarding, and `reminders/schedule` falls back to email, SMS, or WhatsApp when no active subscription exists.
+
+**Details.** Request permission from a user gesture at a sensible moment (after the first session is scheduled, with a one-line explanation), never on first load — a denied prompt is hard to undo. Payloads are small (~4 KB) and carry no seeker PII: "Tuesday meditation, 7:00 pm — 12 registered. Tap for roster." Subscriptions expire; a `410 Gone` from the push service means delete that row. A user may hold several subscriptions (phone and laptop), so `push_subscription` is one-to-many on `app_user`.
