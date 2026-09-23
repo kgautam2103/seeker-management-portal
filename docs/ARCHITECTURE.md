@@ -144,7 +144,7 @@ src/
     supabase/            browser client, server client, service-role client (jobs only)
     providers/           EmailProvider (Resend), MessagingProvider (Twilio SMS + WhatsApp), LlmProvider (Claude), PushProvider, EventbriteClient
     sheets/              Google Sheets reader (service account, read-only) for imports
-    crypto/              token signing, Eventbrite token encryption
+    crypto/              HMAC signing and verification for public-link tokens
     normalize/           phone (E.164), country (ISO-2), US state
   offline/
     db.ts                Dexie schema: outbox, cached rosters
@@ -227,7 +227,7 @@ The steward shares the sheet with the importer's service account as Viewer, or u
 - **Authorization:** `role_assignment` + RLS policies (DATA_MODEL §5). Server actions never use the service-role key. Jobs and webhooks do, and set `center_id` explicitly on every row they write.
 - **Public links:** HMAC-signed tokens `{purpose, seeker_id, exp}`; single purpose; 30-day expiry for testimonials, long-lived for preferences (revocable by rotating the key). Rate-limited.
 - **Webhooks:** signature verification for Eventbrite, Resend, and Twilio; idempotent handlers keyed on provider ids.
-- **Secrets:** Vercel env vars; Eventbrite tokens encrypted at rest; no secrets in the repository (`.env.example` only).
+- **Secrets:** Vercel env vars, including the single Eventbrite private API key; nothing secret in the database or the repository (`.env.example` only).
 - **PII minimization:** no health data, IDs, DOB, or street address anywhere in the schema; remarks are internal and excluded from LLM prompts and exports by default.
 - **Auditability:** `audit_log` for exports, merges, anonymizations, bulk sends, role changes.
 - **Consent posture:** no written statement at intake for now (PRD D7); `consent.text_version` stays null; opt-out via unsubscribe and STOP is unconditional. US SMS needs a lightweight opt-in for TCPA and 10DLC — built into Phase 2.
