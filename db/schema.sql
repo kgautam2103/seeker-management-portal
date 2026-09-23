@@ -139,6 +139,7 @@ create table seeker (
   email               citext,
   phone_e164          text check (phone_e164 ~ '^\+[1-9][0-9]{6,14}$'),
   city                text,
+  country_code        char(2),                                -- ISO 3166-1 alpha-2; defaults from the home center
   locale              text,
   how_heard           text,
   mentor_name         text,
