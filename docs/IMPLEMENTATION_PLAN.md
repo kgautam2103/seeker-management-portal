@@ -91,7 +91,7 @@ Effort estimates assume 1–2 developers and are indicative only.
 - Documentation with each phase: import template guide, volunteer one-page quick-start, admin runbook
 - **Public repo:** no real seeker data is ever committed; fixtures and samples are synthetic
 
-## Proposed Stack (to confirm in the architecture step)
+## Proposed Stack (detailed in [ARCHITECTURE.md](ARCHITECTURE.md))
 
 - **Frontend / PWA:** Next.js + TypeScript + Tailwind; service worker via Serwist
 - **Backend / DB:** Next.js API routes or a small Node service; PostgreSQL (managed free tier, e.g., Supabase or Neon)
