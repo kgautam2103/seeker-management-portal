@@ -1,0 +1,46 @@
+{
+  "name": "seeker-management-portal",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:migration": "node scripts/build-supabase-migration.mjs",
+    "db:validate": "bash scripts/validate-db.sh",
+    "db:types": "supabase gen types typescript --local > src/lib/supabase/database.types.ts",
+    "icons": "python3 scripts/gen-icons.py"
+  },
+  "dependencies": {
+    "@sentry/nextjs": "^11.0.0",
+    "@serwist/turbopack": "^9.5.12",
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.117.1",
+    "dexie": "^4.4.6",
+    "inngest": "^4.21.0",
+    "libphonenumber-js": "^1.13.13",
+    "next": "16.3.6",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "serwist": "^9.5.12",
+    "web-push": "^3.6.7",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^22.20.4",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
+    "esbuild": "^0.28.2",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.6",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "^5.0.1"
+  }
+}

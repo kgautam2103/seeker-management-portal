@@ -245,7 +245,9 @@ The steward shares the sheet with the importer's service account as Viewer, or u
 
 **CI (GitHub Actions) on every pull request:** typecheck, lint, unit tests; load `db/schema.sql` into a Postgres service container and run `db/smoke_test.sql` (already written); Playwright smoke test of intake and attendance including the offline path.
 
-**Migrations:** `db/schema.sql` remains the readable source of truth for the initial schema; Supabase CLI generates `supabase/migrations/0001_initial.sql` from it, and later changes are incremental migration files reviewed in pull requests.
+**Migrations:** `db/schema.sql` remains the readable source of truth for the initial schema; `scripts/build-supabase-migration.mjs` generates `supabase/migrations/20260923000000_initial.sql` from it (swapping in `auth.uid()`, the `auth.users` mirror trigger, and role grants), CI checks the two stay in sync, and later changes are incremental migration files reviewed in pull requests.
+
+**Scaffold notes (2026-09-23):** Next 16 with Turbopack; the service worker is compiled and served by Serwist's route handler at `/serwist/sw.js` rather than a webpack plugin; the session middleware is `src/proxy.ts` (Next 16's name for middleware). See [DEVELOPMENT.md](DEVELOPMENT.md).
 
 -----
 
@@ -297,6 +299,8 @@ Assumptions (adjust to actuals): 40,000 seekers stored; 6,000 enrolled in weekly
 | **Total at one year** | | **≈ $350–800 / month** | 80–90% of it is messaging |
 
 **What moves the number is the channel per message type, not the platform.** Reminders on WhatsApp-utility instead of SMS and invitations kept on email bring the total to roughly **$150–250 / month**; everything on SMS pushes it toward $800. Email-only at the same scale is **≈ $50–140 / month**. The portal therefore treats channel preference per program and per message type as a cost control, and the deliverability dashboard should show cost per campaign.
+
+All accounts are created under the project Google account (novasahajameditation@gmail.com) with KG's personal account as recovery — see [SETUP_ACCOUNTS.md](SETUP_ACCOUNTS.md).
 
 -----
 

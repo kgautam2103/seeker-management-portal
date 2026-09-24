@@ -198,7 +198,7 @@ Eventbrite API (one private token with multi-organization access; backfill, sche
 | D3 | Custom PWA on managed services rather than no-code assembly (alternatives weighed in v0.1: Google Forms + Sheets + Apps Script, Airtable, Glide) | 2026-09-22 |
 | D4 | **Rollout:** DMV pilot → New York and Texas → all US | 2026-09-23 |
 | D5 | **Historical data:** ~30,000 records in a Google Sheet, imported per the import template | 2026-09-23 |
-| D6 | **Ownership and budget:** KG is admin, budget owner, and long-term steward; start minimal on free tiers | 2026-09-23 |
+| D6 | **Ownership and budget:** KG is admin, budget owner, and long-term steward; start minimal on free tiers. All service accounts are created under the project Google account **novasahajameditation@gmail.com**, with KG's personal account as recovery and backup admin (see [SETUP_ACCOUNTS.md](SETUP_ACCOUNTS.md)) | 2026-09-23 |
 | D7 | **Consent:** no written consent statement at intake for now; opt-out always available; revisit later | 2026-09-23 |
 | D8 | **Messaging channels:** SMS **and** WhatsApp | 2026-09-23 |
 | D9 | **Eventbrite:** one API key with access to multiple organizations; a backfill script pulls seekers from all events in all organizations, then ongoing sync | 2026-09-23 |
@@ -207,9 +207,9 @@ Eventbrite API (one private token with multi-organization access; backfill, sche
 
 ## 13. Open Questions
 
-1. **Domain** — name and registrar for the portal and sending domain (SPF/DKIM/DMARC); KG to purchase and hold.
+1. **Domain** — candidates checked 2026-09-23 in [SETUP_ACCOUNTS.md §1](SETUP_ACCOUNTS.md#1-domain); recommendation `sahajaseekers.org` (+ `.com`). KG to choose and register under the project Google account.
 2. **SMS opt-in mechanics** — keyword (text JOIN) vs checkbox at intake; register the 10DLC brand as KG personally or as an organization?
-3. **Backup admin** — who is the second person with admin access, so the portal never depends on one login?
+3. **Backup admin** — KG's personal account is the recovery contact on every service; a second *person* with admin access is still to be named.
 4. **Retention window** — how long before an inactive seeker is anonymized?
 5. **YouTube privacy level** — *private* videos are visible only to invited Google accounts; *unlisted* videos are viewable by anyone with the link. If testimonials should be watchable from a portal link, unlisted is the practical setting.
 

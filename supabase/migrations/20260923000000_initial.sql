@@ -1,9 +1,12 @@
+-- Generated from db/schema.sql by scripts/build-supabase-migration.mjs — do not edit by hand.
+-- Differences from db/schema.sql: current_app_user_id() reads auth.uid(); app_user.id references auth.users;
+-- auth-user mirror trigger and role grants appended.
+
 -- Seeker Management Portal — first-pass schema (PostgreSQL 15+)
 -- Companion to docs/DATA_MODEL.md. Not yet applied to any environment.
 -- Supabase note: replace the body of current_app_user_id() with `select auth.uid()`
 -- and make app_user.id equal to the auth user id.
 
-begin;
 
 create extension if not exists citext;
 create extension if not exists pg_trgm;
@@ -46,7 +49,7 @@ end $$;
 
 -- Current user id. Supabase: `select auth.uid()`.
 create or replace function current_app_user_id() returns uuid language sql stable as $$
-  select nullif(current_setting('app.user_id', true), '')::uuid
+  select auth.uid()
 $$;
 
 -- ============================================================
@@ -73,7 +76,7 @@ create table center (
 );
 
 create table app_user (
-  id          uuid primary key default gen_random_uuid(),
+  id          uuid primary key references auth.users(id) on delete cascade,
   email       citext not null unique,
   full_name   text not null,
   phone_e164  text,
@@ -561,4 +564,30 @@ alter table audit_log enable row level security;
 create policy audit_admin_read on audit_log for select using (is_admin());
 create policy audit_insert_any on audit_log for insert with check (current_app_user_id() is not null);
 
-commit;
+-- ============================================================
+-- Supabase specifics
+-- ============================================================
+-- Mirror every new auth user into app_user. Roles are granted separately by an admin (role_assignment).
+create or replace function public.handle_new_auth_user() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.app_user (id, email, full_name)
+  values (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', split_part(new.email, '@', 1))
+  )
+  on conflict (id) do update set email = excluded.email;
+  return new;
+end $$;
+
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_auth_user();
+
+-- Grants. authenticated acts under RLS; service_role (jobs, webhooks) bypasses RLS by design (AD-3); anon gets nothing.
+grant usage on schema public to authenticated, service_role;
+grant all on all tables in schema public to authenticated, service_role;
+grant all on all sequences in schema public to authenticated, service_role;
+grant execute on all functions in schema public to authenticated, service_role;
+revoke all on all tables in schema public from anon;

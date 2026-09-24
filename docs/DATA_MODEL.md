@@ -218,7 +218,7 @@ Field lists are complete for the first pass; types follow the DDL. `center_id` m
 | Table | Fields | Notes |
 |---|---|---|
 | `region` | `id`, `name` | Groups centers for regional coordinators. Assumes a center belongs to exactly one region. |
-| `center` | `id`, `region_id`, `name`, `address`, `city`, `country_code`, `timezone`, `is_active` | `timezone` renders session times locally; supports international centers. |
+| `center` | `id`, `region_id`, `name`, `address`, `city`, `state`, `country_code`, `timezone`, `is_active` | `timezone` renders session times locally; supports international centers. |
 | `app_user` | `id`, `email` (citext, unique), `full_name`, `phone_e164`, `locale`, `is_active` | On Supabase, `id` equals the auth user id. |
 | `role_assignment` | `user_id`, `role`, `center_id`, `region_id` | Roles: `admin` (no scope), `regional_coordinator` (region), `volunteer_coordinator` / `instructor` (center). A check constraint enforces the right scope per role. One user may hold several. |
 | `push_subscription` | `user_id`, `endpoint` (unique), `p256dh`, `auth`, `user_agent` | Web Push targets for instructor reminders (R6). |
