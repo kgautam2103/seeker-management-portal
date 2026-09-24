@@ -12,33 +12,25 @@ Do these in order; the ones marked *lead time* should start early because someon
 |---|---|
 | Turn on 2-Step Verification on novasahajameditation@gmail.com; add a recovery phone and KG's personal email as recovery | Every other account will hang off this one |
 | Create a password-manager vault for the project (Bitwarden free or 1Password) and share it with KG's personal account | Recovery codes, API keys, and the database password live here — never in the repo or in chat |
-| Decide the domain (below) | Vercel, Resend, and Supabase Auth all need it |
+| Register `sahajaseekers.com` (below) | Vercel, Resend, and Supabase Auth all need it |
 
-## 1. Domain
+## 1. Domain — decided: `sahajaseekers.com`
 
-**Checked 2026-09-23 (whois):**
+**Decision (KG, 2026-09-24):** register **sahajaseekers.com** under the project Google account; the `.org` is deliberately not taken. Register for 2+ years with auto-renew, DNSSEC on.
 
-| Domain | Status | Notes |
+**Registrar:** Cloudflare Registrar (at-cost pricing, free DNS, DNSSEC) or Porkbun. Avoid Squarespace Domains (the former Google Domains).
+
+**DNS layout**
+
+| Host | Purpose | Record |
 |---|---|---|
-| **sahajaseekers.org** | available | **Recommended.** Says what the portal is for, is not tied to one region (the rollout ends at all US), and does not collide with the organization's own `sahajayoga.*` names. Also take `.com` (available) to redirect. |
-| novasahaja.org / .com | available | Matches the Google account's "NoVA Sahaja" identity; short. Regional — fine if the brand is meant to stay Northern Virginia-first. |
-| sahajameditationusa.org | available | National, descriptive, longer. |
-| seekerportal.org / seekersportal.org | available | Generic; no community identity. |
-| dmvsahaja.org / sahajadmv.org | available | Regional. |
-| sahajacenter.org, novameditation.org, sahajanova.org | available | Weaker fits. |
-| sahajameditation.org, meditatenova.org | taken | — |
+| `portal.sahajaseekers.com` | The PWA on Vercel | CNAME to the Vercel target shown when the domain is added to the project |
+| `notify.sahajaseekers.com` | Sending domain for Resend — a subdomain isolates bulk-mail reputation from the root; SPF, DKIM, and DMARC live here | TXT/MX/CNAME records as shown by Resend when the domain is added |
+| `sahajaseekers.com` (root) | Redirect to `portal.` for now; optional landing page later | Vercel redirect, or registrar-level forwarding |
 
-Availability was checked with `whois` and can change at any time; confirm at the registrar before deciding.
+Nothing else should point at the root until a public landing page exists.
 
-**Registrar:** Cloudflare Registrar (at-cost pricing, free DNS, DNSSEC) or Porkbun. Create the registrar account with the project Google account. Avoid Squarespace Domains (the former Google Domains) — pricier, and the account would be tied to a Google identity anyway. `.org` is the right primary TLD for a volunteer community project; register for 2+ years and turn on auto-renew.
-
-**DNS layout** (assuming `sahajaseekers.org`):
-
-| Host | Purpose |
-|---|---|
-| `portal.sahajaseekers.org` | The PWA (Vercel) |
-| `notify.sahajaseekers.org` | Sending domain for Resend — a subdomain isolates bulk-mail reputation from the root; SPF, DKIM, DMARC records live here |
-| root | Optional landing page later; MX only if you ever want mailboxes |
+*Candidates considered on 2026-09-23 (whois): sahajaseekers.org/.com, novasahaja.org/.com, sahajameditationusa.org, seekerportal.org, seekersportal.org, dmvsahaja.org, sahajadmv.org, sahajacenter.org, novameditation.org, sahajanova.org were available; sahajameditation.org and meditatenova.org were taken. `sahajaseekers.com` was chosen as descriptive, national, and distinct from the organization's own `sahajayoga.*` names.*
 
 ## 2. Code hosting — GitHub
 
@@ -55,12 +47,12 @@ Either way: enable 2FA, protect `main` (require CI green before merge), and keep
 
 | Service | Sign in with | Create | Then | Lead time |
 |---|---|---|---|---|
-| **Vercel** | GitHub (project account) — Hobby | Import the repo; framework preset Next.js | Add domain `portal.<domain>`; set env vars from `.env.example`: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SITE_URL` | none |
-| **Supabase** | Google (project account) — Free | Organization "Nova Sahaja Meditation"; project in **us-east-1 (N. Virginia)**; save the DB password in the vault | Auth → Providers: enable Email (magic link) and Google (needs step 4); Auth → URL configuration: Site URL `https://portal.<domain>`, redirect URLs `https://portal.<domain>/auth/callback` and `http://localhost:3000/auth/callback`; **Auth → SMTP: use Resend** (Supabase's built-in mailer allows only a few emails per hour); run the migration with `npx supabase link` + `db push` | none |
+| **Vercel** | GitHub (project account) — Hobby | Import the repo; framework preset Next.js | Add domain `portal.sahajaseekers.com`; set env vars from `.env.example`: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SITE_URL` | none |
+| **Supabase** | Google (project account) — Free | Organization "Nova Sahaja Meditation"; project in **us-east-1 (N. Virginia)**; save the DB password in the vault | Auth → Providers: enable Email (magic link) and Google (needs step 4); Auth → URL configuration: Site URL `https://portal.sahajaseekers.com`, redirect URLs `https://portal.sahajaseekers.com/auth/callback` and `http://localhost:3000/auth/callback`; **Auth → SMTP: use Resend** (Supabase's built-in mailer allows only a few emails per hour); run the migration with `npx supabase link` + `db push` | none |
 | **Inngest** | Google (project account) — Free | App `seeker-portal` | Install the Inngest ↔ Vercel integration; it sets `INNGEST_EVENT_KEY` / `INNGEST_SIGNING_KEY` on Vercel | none |
-| **Resend** | Google (project account) — Free | Add domain `notify.<domain>`; add the DKIM/SPF/DMARC records at the registrar | API key → Vercel `RESEND_API_KEY`; webhook `https://portal.<domain>/api/webhooks/resend` → signing secret; also configure Supabase Auth SMTP with it | DNS propagation minutes–hours; warm up sending volume gradually |
+| **Resend** | Google (project account) — Free | Add domain `notify.sahajaseekers.com`; add the DKIM/SPF/DMARC records at the registrar | API key → Vercel `RESEND_API_KEY`; webhook `https://portal.sahajaseekers.com/api/webhooks/resend` → signing secret; also configure Supabase Auth SMTP with it | DNS propagation minutes–hours; warm up sending volume gradually |
 | **Sentry** | Google (project account) — Developer | Org + Next.js project | DSN → `NEXT_PUBLIC_SENTRY_DSN`; install the Sentry ↔ Vercel integration for `SENTRY_AUTH_TOKEN` / org / project | none |
-| **Uptime ping** | Google (project account) | UptimeRobot (free) monitor on `https://portal.<domain>/api/health` every 5 min | Keeps the free-tier database awake and alerts on downtime | none |
+| **Uptime ping** | Google (project account) | UptimeRobot (free) monitor on `https://portal.sahajaseekers.com/api/health` every 5 min | Keeps the free-tier database awake and alerts on downtime | none |
 
 ## 4. Google Cloud (under the project Google account)
 

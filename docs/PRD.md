@@ -204,14 +204,14 @@ Eventbrite API (one private token with multi-organization access; backfill, sche
 | D9 | **Eventbrite:** one API key with access to multiple organizations; a backfill script pulls seekers from all events in all organizations, then ongoing sync | 2026-09-23 |
 | D10 | **AI review:** only drafts from new or changed templates are reviewed; approved templates send automatically | 2026-09-23 |
 | D11 | **Testimonials:** later phase; videos kept on a private YouTube channel and linked | 2026-09-23 |
+| D12 | **Domain:** `sahajaseekers.com`, registered under the project Google account; `.org` not taken. Portal at `portal.sahajaseekers.com`, sending domain `notify.sahajaseekers.com` | 2026-09-24 |
 
 ## 13. Open Questions
 
-1. **Domain** — candidates checked 2026-09-23 in [SETUP_ACCOUNTS.md §1](SETUP_ACCOUNTS.md#1-domain); recommendation `sahajaseekers.org` (+ `.com`). KG to choose and register under the project Google account.
-2. **SMS opt-in mechanics** — keyword (text JOIN) vs checkbox at intake; register the 10DLC brand as KG personally or as an organization?
-3. **Backup admin** — KG's personal account is the recovery contact on every service; a second *person* with admin access is still to be named.
-4. **Retention window** — how long before an inactive seeker is anonymized?
-5. **YouTube privacy level** — *private* videos are visible only to invited Google accounts; *unlisted* videos are viewable by anyone with the link. If testimonials should be watchable from a portal link, unlisted is the practical setting.
+1. **SMS opt-in mechanics** — keyword (text JOIN) vs checkbox at intake; register the 10DLC brand as KG personally or as an organization?
+2. **Backup admin** — KG's personal account is the recovery contact on every service; a second *person* with admin access is still to be named.
+3. **Retention window** — how long before an inactive seeker is anonymized?
+4. **YouTube privacy level** — *private* videos are visible only to invited Google accounts; *unlisted* videos are viewable by anyone with the link. If testimonials should be watchable from a portal link, unlisted is the practical setting.
 
 ## 14. Document History
 
@@ -220,6 +220,7 @@ Eventbrite API (one private token with multi-organization access; backfill, sche
 | v0.1 | 2026-09-02 | Google Doc (KG) | Original PRD: problem, goals, personas, MVP features, V2 ideas, NFRs, six open questions. Archived verbatim at [archive/PRD-v0.1-2026-09-02.md](archive/PRD-v0.1-2026-09-02.md). |
 | v0.2 | 2026-09-22 | This repo | Merged the handwritten planning notes: requirements R1–R15, PWA only, communications in scope. |
 | v0.3 | 2026-09-23 | This repo | Answers to all open questions: rollout, 30k import, ownership, consent, channels, Eventbrite, AI review, testimonials. Google Doc retired; this file is canonical. |
+| v0.3.1 | 2026-09-24 | This repo | Domain decided (D12): sahajaseekers.com. |
 
 -----
 
