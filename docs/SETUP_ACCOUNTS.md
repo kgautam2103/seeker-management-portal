@@ -4,6 +4,21 @@
 
 Do these in order; the ones marked *lead time* should start early because someone else's approval is involved.
 
+## Progress
+
+| Step | Status |
+|---|---|
+| Google account 2-Step Verification | ✅ done 2026-09-24 |
+| Vault for credentials | ✅ Google Password Manager on the project account (2026-09-24). Store API keys and recovery codes as entries with notes; export a copy of recovery codes to the personal account's manager as backup. |
+| Domain `sahajaseekers.com` registered | ✅ done 2026-09-24 |
+| GitHub path (A or B) | ⬜ decide |
+| Supabase project | ⬜ |
+| Vercel project + domain | ⬜ |
+| Google Cloud: OAuth client, Sheets service account | ⬜ |
+| Inngest, Resend (+ Supabase SMTP), Sentry | ⬜ |
+| Uptime monitor | ⬜ after first deploy |
+| Eventbrite token in Vercel | ⬜ before the backfill slice |
+
 -----
 
 ## 0. Before anything else
@@ -11,7 +26,7 @@ Do these in order; the ones marked *lead time* should start early because someon
 | Step | Why |
 |---|---|
 | Turn on 2-Step Verification on novasahajameditation@gmail.com; add a recovery phone and KG's personal email as recovery | Every other account will hang off this one |
-| Create a password-manager vault for the project (Bitwarden free or 1Password) and share it with KG's personal account | Recovery codes, API keys, and the database password live here — never in the repo or in chat |
+| Use a password manager on the project account (decision: Google Password Manager) and keep a backup copy of recovery codes in KG's personal manager | Recovery codes, API keys, and the database password live here — never in the repo or in chat |
 | Register `sahajaseekers.com` (below) | Vercel, Resend, and Supabase Auth all need it |
 
 ## 1. Domain — decided: `sahajaseekers.com`
