@@ -22,7 +22,7 @@ In a second terminal, the local Inngest dev server discovers the app's functions
 npx inngest-cli@latest dev -u http://localhost:3000/api/inngest
 ```
 
-Supabase Studio runs at `http://127.0.0.1:54323`; local magic-link emails are caught by the bundled mail catcher (Mailpit) at `http://127.0.0.1:54324`.
+Supabase Studio runs at `http://127.0.0.1:55323`; local magic-link emails are caught by the bundled mail catcher (Mailpit) at `http://127.0.0.1:55324`.
 
 ## Signing in and getting a role
 
