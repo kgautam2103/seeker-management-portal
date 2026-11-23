@@ -89,4 +89,46 @@ do $$ begin
   end;
 end $$;
 
+-- Intake (R1): create, idempotent replay, exact matches, center check, fuzzy duplicates.
+do $$
+declare r jsonb; r2 jsonb;
+begin
+  perform set_config('app.user_id', '00000000-0000-0000-0000-000000000021', false);
+  r := intake_seeker('{"client_mutation_id":"00000000-0000-0000-0000-0000000000a1","center_id":"00000000-0000-0000-0000-000000000011",
+                       "full_name":"Ravi Example","email":"ravi@example.com","city":"Arlington","state":"VA","country_code":"US"}');
+  assert r->>'outcome' = 'created', 'FAIL: intake did not create a seeker: ' || r::text;
+  assert exists (select 1 from consent where seeker_id = (r->>'seeker_id')::uuid and channel = 'email' and source = 'intake_form'),
+    'FAIL: intake did not record email consent';
+  r2 := intake_seeker('{"client_mutation_id":"00000000-0000-0000-0000-0000000000a1","center_id":"00000000-0000-0000-0000-000000000011",
+                        "full_name":"Ravi Example","email":"ravi@example.com","city":"Arlington","state":"VA","country_code":"US"}');
+  assert r2->>'outcome' = 'already_applied' and r2->>'seeker_id' = r->>'seeker_id', 'FAIL: replay was not idempotent: ' || r2::text;
+  raise notice 'PASS: intake creates a seeker and a replay is a no-op';
+
+  r := intake_seeker('{"client_mutation_id":"00000000-0000-0000-0000-0000000000a2","center_id":"00000000-0000-0000-0000-000000000011",
+                       "full_name":"Asha E.","email":"ASHA@example.com","phone_e164":"+12025550143","city":"Arlington","state":"VA"}');
+  assert r->>'outcome' = 'matched' and r->>'matched_on' = 'email', 'FAIL: same-center exact match: ' || r::text;
+  assert (select phone_e164 from seeker where id = '00000000-0000-0000-0000-000000000031') = '+12025550143',
+    'FAIL: matched intake did not fill a blank phone';
+  raise notice 'PASS: intake matches an existing seeker by email and fills blanks';
+
+  perform set_config('app.user_id', '00000000-0000-0000-0000-000000000022', false);
+  r := intake_seeker('{"client_mutation_id":"00000000-0000-0000-0000-0000000000a3","center_id":"00000000-0000-0000-0000-000000000012",
+                       "full_name":"Someone Else","phone_e164":"+12025550143","city":"Fairfax","state":"VA"}');
+  assert r->>'outcome' = 'matched_other_center' and r->>'seeker_id' is null, 'FAIL: other-center match leaked or created: ' || r::text;
+  assert intake_contact_check(null, '+12025550143') = '{"match":"other_center","matched_on":"phone"}'::jsonb,
+    'FAIL: contact check leaked another center''s seeker';
+  begin
+    perform intake_seeker('{"client_mutation_id":"00000000-0000-0000-0000-0000000000a4","center_id":"00000000-0000-0000-0000-000000000011",
+                            "full_name":"Intruder","email":"intruder@example.com"}');
+    raise exception 'FAIL: intake into another center was accepted';
+  exception when insufficient_privilege then null;
+  end;
+  raise notice 'PASS: intake hides other centers and rejects writes to them';
+
+  r := intake_seeker('{"client_mutation_id":"00000000-0000-0000-0000-0000000000a5","center_id":"00000000-0000-0000-0000-000000000012",
+                       "full_name":"Ravi Exampel","email":"ravi.other@example.com","city":"Arlington","state":"VA"}');
+  assert r->>'outcome' = 'created' and (r->>'possible_duplicates')::int = 1, 'FAIL: fuzzy duplicate not flagged: ' || r::text;
+  raise notice 'PASS: intake flags a similar name as a duplicate candidate';
+end $$;
+
 rollback;

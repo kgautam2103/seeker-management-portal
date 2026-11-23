@@ -517,6 +517,167 @@ create trigger suppression_consent after insert on suppression
   for each row execute function suppression_to_consent();
 
 -- ============================================================
+-- Intake (R1)
+-- ============================================================
+-- Intake is one function so the seeker, its consent, its registration and any duplicate candidates
+-- are written in one transaction, and so an exact contact match is found even when the existing
+-- seeker belongs to a center the caller cannot see (RLS would hide that row while the unique index
+-- still rejects the insert). Both functions run as the owner, so each checks the caller itself and
+-- never returns another center's seeker details.
+
+-- Before saving: is this email or phone already on file? Another center's match reveals nothing but that fact.
+create or replace function intake_contact_check(p_email text, p_phone text) returns jsonb
+language plpgsql stable security definer set search_path = public, pg_temp as $$
+declare
+  v_email citext := nullif(trim(p_email), '');
+  v_phone text   := nullif(trim(p_phone), '');
+  m       record;
+begin
+  if not exists (select 1 from role_assignment where user_id = current_app_user_id()) then
+    raise exception 'no role assigned' using errcode = '42501';
+  end if;
+  if v_email is null and v_phone is null then
+    return jsonb_build_object('match', 'none');
+  end if;
+  select s.id, s.home_center_id, s.full_name,
+         case when v_email is not null and s.email = v_email then 'email' else 'phone' end as matched_on
+    into m
+    from seeker s
+   where s.merged_into_id is null and s.anonymized_at is null
+     and ((v_email is not null and s.email = v_email) or (v_phone is not null and s.phone_e164 = v_phone))
+   order by (v_email is not null and s.email = v_email) desc, s.created_at
+   limit 1;
+  if not found then
+    return jsonb_build_object('match', 'none');
+  end if;
+  if center_visible(m.home_center_id) then
+    return jsonb_build_object('match', 'visible', 'seeker_id', m.id, 'full_name', m.full_name,
+      'matched_on', m.matched_on, 'center_name', (select name from center where id = m.home_center_id));
+  end if;
+  return jsonb_build_object('match', 'other_center', 'matched_on', m.matched_on);
+end $$;
+
+-- Save one intake entry. Idempotent on client_mutation_id, so an offline replay never duplicates.
+-- Expects normalized input: phone_e164 in E.164, US state as the USPS code.
+-- Outcomes: created | already_applied | matched (same person, visible) | matched_other_center.
+create or replace function intake_seeker(p jsonb) returns jsonb
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare
+  v_user    uuid   := current_app_user_id();
+  v_center  uuid   := nullif(p->>'center_id', '')::uuid;
+  v_program uuid   := nullif(p->>'program_id', '')::uuid;
+  v_cmid    uuid   := nullif(p->>'client_mutation_id', '')::uuid;
+  v_name    text   := nullif(trim(p->>'full_name'), '');
+  v_email   citext := nullif(trim(p->>'email'), '');
+  v_phone   text   := nullif(trim(p->>'phone_e164'), '');
+  v_city    text   := nullif(trim(p->>'city'), '');
+  v_id      uuid;
+  v_dupes   int    := 0;
+  m         record;
+begin
+  if v_user is null then
+    raise exception 'not signed in' using errcode = '42501';
+  end if;
+  if v_center is null or not center_visible(v_center) then
+    raise exception 'you cannot add seekers to this center' using errcode = '42501';
+  end if;
+  if v_cmid is null or v_name is null then
+    raise exception 'client_mutation_id and full_name are required' using errcode = '22023';
+  end if;
+  if v_program is not null and not exists (select 1 from program where id = v_program and center_id = v_center) then
+    raise exception 'that program does not belong to this center' using errcode = '22023';
+  end if;
+
+  -- A replay of an entry that already created a seeker (response lost, sync retried).
+  select id into v_id from seeker where client_mutation_id = v_cmid;
+  if found then
+    return jsonb_build_object('outcome', 'already_applied', 'seeker_id', v_id);
+  end if;
+
+  -- Exact contact match: this person is already on file.
+  select s.id, s.home_center_id, s.full_name,
+         case when v_email is not null and s.email = v_email then 'email' else 'phone' end as matched_on
+    into m
+    from seeker s
+   where s.merged_into_id is null and s.anonymized_at is null
+     and ((v_email is not null and s.email = v_email) or (v_phone is not null and s.phone_e164 = v_phone))
+   order by (v_email is not null and s.email = v_email) desc, s.created_at
+   limit 1;
+  if found then
+    if center_visible(m.home_center_id) then
+      -- Fill blanks only; never overwrite what is on file. A contact is added only if no one else has it.
+      update seeker s set
+        email            = coalesce(s.email, case when v_email is not null and not exists (
+                             select 1 from seeker o where o.email = v_email and o.merged_into_id is null and o.anonymized_at is null)
+                           then v_email end),
+        phone_e164       = coalesce(s.phone_e164, case when v_phone is not null and not exists (
+                             select 1 from seeker o where o.phone_e164 = v_phone and o.merged_into_id is null and o.anonymized_at is null)
+                           then v_phone end),
+        city             = coalesce(s.city, v_city),
+        state            = coalesce(s.state, case when s.city is null then nullif(trim(p->>'state'), '') end),
+        country_code     = coalesce(s.country_code, nullif(p->>'country_code', '')),
+        how_heard        = coalesce(s.how_heard, nullif(trim(p->>'how_heard'), '')),
+        first_session_at = coalesce(s.first_session_at, nullif(p->>'first_session_at', '')::date),
+        home_center_id   = coalesce(s.home_center_id, v_center)
+       where s.id = m.id;
+      if v_program is not null then
+        insert into registration (seeker_id, program_id, center_id, source)
+        values (m.id, v_program, v_center, 'intake')
+        on conflict (seeker_id, program_id) do nothing;
+      end if;
+      return jsonb_build_object('outcome', 'matched', 'seeker_id', m.id, 'full_name', m.full_name, 'matched_on', m.matched_on);
+    end if;
+    -- On file with another center: record it for an admin, reveal nothing about that seeker.
+    if not exists (select 1 from audit_log where action = 'seeker.intake_matched_other_center'
+                     and metadata->>'client_mutation_id' = v_cmid::text) then
+      insert into audit_log (actor_id, action, entity_type, entity_id, center_id, metadata)
+      values (v_user, 'seeker.intake_matched_other_center', 'seeker', m.id, v_center,
+              jsonb_build_object('client_mutation_id', v_cmid, 'matched_on', m.matched_on, 'program_id', v_program));
+    end if;
+    return jsonb_build_object('outcome', 'matched_other_center', 'matched_on', m.matched_on);
+  end if;
+
+  begin
+    insert into seeker (home_center_id, full_name, email, phone_e164, city, state, country_code, how_heard,
+                        mentor_name, mentor_email, mentor_user_id, first_session_at, source, client_mutation_id, created_by)
+    values (v_center, v_name, v_email, v_phone, v_city, nullif(trim(p->>'state'), ''),
+            coalesce(nullif(p->>'country_code', ''), (select country_code from center where id = v_center)),
+            nullif(trim(p->>'how_heard'), ''), nullif(trim(p->>'mentor_name'), ''), nullif(trim(p->>'mentor_email'), '')::citext,
+            (select id from app_user where email = nullif(trim(p->>'mentor_email'), '')::citext),
+            nullif(p->>'first_session_at', '')::date, 'intake', v_cmid, v_user)
+    returning id into v_id;
+  exception when unique_violation then
+    -- Another device saved this person (or this entry) a moment ago: resolve against that row instead.
+    return intake_seeker(p);
+  end;
+
+  -- Consent is implied by sharing an email for follow-up (D7). SMS needs its own opt-in (Phase 2), so none is recorded here.
+  if v_email is not null then
+    insert into consent (seeker_id, channel, status, source, recorded_by)
+    values (v_id, 'email', 'granted', 'intake_form', v_user);
+  end if;
+  if v_program is not null then
+    insert into registration (seeker_id, program_id, center_id, source) values (v_id, v_program, v_center, 'intake');
+  end if;
+
+  -- Probable duplicates go to the review queue; they never block the volunteer.
+  insert into duplicate_candidate (seeker_a, seeker_b, score, reason)
+  select least(v_id, s.id), greatest(v_id, s.id), round(similarity(s.full_name, v_name)::numeric, 3),
+         case when v_city is not null and lower(s.city) = lower(v_city) then 'similar name, same city' else 'similar name' end
+    from seeker s
+   where s.id <> v_id and s.merged_into_id is null and s.anonymized_at is null
+     and s.full_name % v_name
+     and (similarity(s.full_name, v_name) >= 0.8
+          or (similarity(s.full_name, v_name) >= 0.5 and v_city is not null and lower(s.city) = lower(v_city)))
+   order by similarity(s.full_name, v_name) desc
+   limit 5
+  on conflict do nothing;
+  get diagnostics v_dupes = row_count;
+
+  return jsonb_build_object('outcome', 'created', 'seeker_id', v_id, 'possible_duplicates', v_dupes);
+end $$;
+
+-- ============================================================
 -- Row-level security
 -- ============================================================
 -- One center-scope policy for every table that carries a center_id (null = admin-only).
@@ -591,3 +752,5 @@ grant all on all tables in schema public to authenticated, service_role;
 grant all on all sequences in schema public to authenticated, service_role;
 grant execute on all functions in schema public to authenticated, service_role;
 revoke all on all tables in schema public from anon;
+-- The intake functions run as the owner; only signed-in users may call them (they also check the caller).
+revoke execute on function intake_seeker(jsonb), intake_contact_check(text, text) from public, anon;

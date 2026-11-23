@@ -64,6 +64,8 @@ grant all on all tables in schema public to authenticated, service_role;
 grant all on all sequences in schema public to authenticated, service_role;
 grant execute on all functions in schema public to authenticated, service_role;
 revoke all on all tables in schema public from anon;
+-- The intake functions run as the owner; only signed-in users may call them (they also check the caller).
+revoke execute on function intake_seeker(jsonb), intake_contact_check(text, text) from public, anon;
 `;
 
 mkdirSync("supabase/migrations", { recursive: true });

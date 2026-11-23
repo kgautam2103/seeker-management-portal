@@ -35,3 +35,16 @@ do $$ begin
   assert (select status from message where to_address = 'Asha@Example.com') = 'suppressed', 'FAIL: suppression trigger';
   raise notice 'PASS: suppression trigger under authenticated role';
 end $$;
+do $$
+declare r jsonb;
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000021', false);
+  r := intake_seeker('{"client_mutation_id":"00000000-0000-0000-0000-0000000000b1","center_id":"00000000-0000-0000-0000-000000000011",
+                       "full_name":"Mira Example","email":"mira@example.com","city":"Arlington","state":"VA"}');
+  assert r->>'outcome' = 'created', 'FAIL: intake under auth.uid(): ' || r::text;
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000022', false);
+  r := intake_seeker('{"client_mutation_id":"00000000-0000-0000-0000-0000000000b2","center_id":"00000000-0000-0000-0000-000000000012",
+                       "full_name":"Mira","email":"mira@example.com","city":"Fairfax","state":"VA"}');
+  assert r->>'outcome' = 'matched_other_center' and r->>'seeker_id' is null, 'FAIL: other-center intake match: ' || r::text;
+  raise notice 'PASS: intake under auth.uid() creates and hides other-center matches';
+end $$;
