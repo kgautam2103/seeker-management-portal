@@ -4,8 +4,9 @@ import { IntakeFormLoader } from "./intake-form-loader";
 
 export const metadata = { title: "Add a seeker" };
 
-export default async function IntakePage() {
-  const options = await getIntakeOptions();
+export default async function IntakePage(props: PageProps<"/intake">) {
+  const [options, query] = await Promise.all([getIntakeOptions(), props.searchParams]);
+  const one = (v: string | string[] | undefined) => (typeof v === "string" ? v : undefined);
 
   if (options.centers.length === 0) {
     return (
@@ -21,5 +22,5 @@ export default async function IntakePage() {
     );
   }
 
-  return <IntakeFormLoader options={options} />;
+  return <IntakeFormLoader options={options} defaults={{ programId: one(query.program), centerId: one(query.center) }} />;
 }

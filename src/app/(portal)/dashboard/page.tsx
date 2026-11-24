@@ -38,8 +38,8 @@ export default async function DashboardPage() {
       </section>
 
       <section className="rounded-lg border border-dashed border-zinc-300 p-4 text-sm text-zinc-600">
-        Phase 1 in progress. Seeker intake works online and offline. Next slices: session roster and attendance,
-        historical import, Eventbrite backfill, center dashboard.
+        Phase 1 in progress. Seeker intake and session attendance work online and offline. Next slices: historical
+        import, Eventbrite backfill, center dashboard.
       </section>
     </div>
   );

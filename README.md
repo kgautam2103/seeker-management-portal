@@ -17,7 +17,7 @@ A Progressive Web App for the Sahaja Yoga volunteer community: capture every see
 
 ## Status
 
-**Phase 1 scaffold is in place** (2026-09-23): Next.js 16 PWA shell, Supabase auth with roles under RLS, generated Supabase migration, Inngest and Sentry plumbing, CI. Nothing is deployed yet — see [docs/SETUP_ACCOUNTS.md](docs/SETUP_ACCOUNTS.md) for the accounts and domain to create first. **Seeker intake (R1)** is built: `/intake` saves on the device first and syncs when online, warns about duplicates, and dedupes on the server. Next slices: session roster and attendance, historical import, Eventbrite backfill, center dashboard.
+**Phase 1 scaffold is in place** (2026-09-23): Next.js 16 PWA shell, Supabase auth with roles under RLS, generated Supabase migration, Inngest and Sentry plumbing, CI. Nothing is deployed yet — see [docs/SETUP_ACCOUNTS.md](docs/SETUP_ACCOUNTS.md) for the accounts and domain to create first. **Seeker intake (R1)** is built: `/intake` saves on the device first and syncs when online, warns about duplicates, and dedupes on the server. **Attendance and remarks (R5)** are built: `/sessions` opens a session's roster, where one tap marks present or absent and notes can be added, offline too; walk-ins can be found by name. Next slices: historical import, Eventbrite backfill, center dashboard.
 
 ## Getting started
 

@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import type { IntakeOptions } from "@/modules/seekers/queries";
+import type { IntakeDefaults } from "./intake-form";
 
 /**
  * The form depends on the device: today's date in its time zone, its locale's country names, its
@@ -18,6 +19,6 @@ const IntakeForm = dynamic(() => import("./intake-form").then((m) => m.IntakeFor
   ),
 });
 
-export function IntakeFormLoader({ options }: { options: IntakeOptions }) {
-  return <IntakeForm options={options} />;
+export function IntakeFormLoader({ options, defaults }: { options: IntakeOptions; defaults?: IntakeDefaults }) {
+  return <IntakeForm options={options} defaults={defaults} />;
 }
