@@ -91,7 +91,7 @@ end $$;
 
 -- Intake (R1): create, idempotent replay, exact matches, center check, fuzzy duplicates.
 do $$
-declare r jsonb; r2 jsonb;
+declare r jsonb; r2 jsonb; v_other uuid;
 begin
   perform set_config('app.user_id', '00000000-0000-0000-0000-000000000021', false);
   r := intake_seeker('{"client_mutation_id":"00000000-0000-0000-0000-0000000000a1","center_id":"00000000-0000-0000-0000-000000000011",
@@ -127,8 +127,33 @@ begin
 
   r := intake_seeker('{"client_mutation_id":"00000000-0000-0000-0000-0000000000a5","center_id":"00000000-0000-0000-0000-000000000012",
                        "full_name":"Ravi Exampel","email":"ravi.other@example.com","city":"Arlington","state":"VA"}');
-  assert r->>'outcome' = 'created' and (r->>'possible_duplicates')::int = 1, 'FAIL: fuzzy duplicate not flagged: ' || r::text;
-  raise notice 'PASS: intake flags a similar name as a duplicate candidate';
+  assert r->>'outcome' = 'created' and (r->>'possible_duplicates')::int = 0,
+    'FAIL: duplicate count revealed another center''s seeker: ' || r::text;
+  v_other := (r->>'seeker_id')::uuid;
+  assert not exists (select 1 from duplicate_candidate), 'FAIL: volunteer can see a cross-center duplicate pair';
+
+  perform set_config('app.user_id', '00000000-0000-0000-0000-000000000099', false);
+  assert (select count(*) from duplicate_candidate) = 1, 'FAIL: admin cannot see the cross-center duplicate pair';
+  raise notice 'PASS: a cross-center duplicate is flagged for admins only';
+
+  perform set_config('app.user_id', '00000000-0000-0000-0000-000000000021', false);
+  assert not exists (select 1 from duplicate_candidate), 'FAIL: other center''s volunteer can see the pair';
+  r := intake_seeker('{"client_mutation_id":"00000000-0000-0000-0000-0000000000a6","center_id":"00000000-0000-0000-0000-000000000011",
+                       "full_name":"Ravi Exampl","email":"ravi.third@example.com","city":"Arlington","state":"VA"}');
+  assert (r->>'possible_duplicates')::int >= 1, 'FAIL: same-center fuzzy duplicate not flagged: ' || r::text;
+  assert (select count(*) from duplicate_candidate) = (r->>'possible_duplicates')::int,
+    'FAIL: volunteer sees a different set of pairs than intake reported';
+  insert into duplicate_candidate (seeker_a, seeker_b, score)
+    values (least('00000000-0000-0000-0000-000000000031'::uuid, (r->>'seeker_id')::uuid),
+            greatest('00000000-0000-0000-0000-000000000031'::uuid, (r->>'seeker_id')::uuid), 0.5)
+    on conflict do nothing;
+  begin
+    insert into duplicate_candidate (seeker_a, seeker_b, score)
+      values (least('00000000-0000-0000-0000-000000000031'::uuid, v_other), greatest('00000000-0000-0000-0000-000000000031'::uuid, v_other), 0.9);
+    raise exception 'FAIL: volunteer flagged a pair involving another center''s seeker';
+  exception when insufficient_privilege then null;
+  end;
+  raise notice 'PASS: volunteers see and flag only same-center duplicate pairs';
 end $$;
 
 rollback;

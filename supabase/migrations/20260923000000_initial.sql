@@ -660,7 +660,9 @@ begin
     insert into registration (seeker_id, program_id, center_id, source) values (v_id, v_program, v_center, 'intake');
   end if;
 
-  -- Probable duplicates go to the review queue; they never block the volunteer.
+  -- Probable duplicates go to the review queue; they never block the volunteer. The count returned
+  -- covers only seekers the caller can see, so it says nothing about other centers' records.
+  with ins as (
   insert into duplicate_candidate (seeker_a, seeker_b, score, reason)
   select least(v_id, s.id), greatest(v_id, s.id), round(similarity(s.full_name, v_name)::numeric, 3),
          case when v_city is not null and lower(s.city) = lower(v_city) then 'similar name, same city' else 'similar name' end
@@ -671,8 +673,12 @@ begin
           or (similarity(s.full_name, v_name) >= 0.5 and v_city is not null and lower(s.city) = lower(v_city)))
    order by similarity(s.full_name, v_name) desc
    limit 5
-  on conflict do nothing;
-  get diagnostics v_dupes = row_count;
+  on conflict do nothing
+  returning seeker_a, seeker_b
+  )
+  select count(*) into v_dupes
+    from ins join seeker o on o.id = case when ins.seeker_a = v_id then ins.seeker_b else ins.seeker_a end
+   where center_visible(o.home_center_id);
 
   return jsonb_build_object('outcome', 'created', 'seeker_id', v_id, 'possible_duplicates', v_dupes);
 end $$;
@@ -700,6 +706,12 @@ create policy seeker_center_scope on seeker for all
 alter table consent enable row level security;
 create policy consent_via_seeker on consent for all
   using (seeker_id in (select id from seeker));   -- seeker is already RLS-filtered
+
+-- A pair is visible only when both seekers are: a cross-center pair is for an admin to review.
+alter table duplicate_candidate enable row level security;
+create policy duplicate_via_seekers on duplicate_candidate for all
+  using      (seeker_a in (select id from seeker) and seeker_b in (select id from seeker))   -- seeker is already RLS-filtered
+  with check (seeker_a in (select id from seeker) and seeker_b in (select id from seeker));
 
 alter table message enable row level security;
 create policy message_scope on message for all
