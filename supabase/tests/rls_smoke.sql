@@ -58,3 +58,21 @@ begin
   assert not exists (select 1 from duplicate_candidate), 'FAIL: volunteer can see a cross-center duplicate pair';
   raise notice 'PASS: cross-center duplicate pairs are hidden under auth.uid()';
 end $$;
+do $$
+declare v_prog uuid := '00000000-0000-0000-0000-000000000041'; v_s uuid; r jsonb;
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000099', false);
+  insert into program (id, center_id, kind, name) values (v_prog, '00000000-0000-0000-0000-000000000011', 'weekly', 'Tuesday meditation');
+  insert into registration (seeker_id, program_id, center_id, source)
+    values ('00000000-0000-0000-0000-000000000031', v_prog, '00000000-0000-0000-0000-000000000011', 'import');
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000021', false);
+  v_s := start_session(v_prog, current_date);
+  r := mark_attendance(jsonb_build_object('client_mutation_id', '00000000-0000-0000-0000-0000000000c1', 'session_id', v_s,
+         'seeker_id', '00000000-0000-0000-0000-000000000031', 'status', 'present'));
+  assert r->>'outcome' = 'recorded', 'FAIL: mark_attendance under auth.uid(): ' || r::text;
+  assert (select status from session_roster(v_s) where seeker_id = '00000000-0000-0000-0000-000000000031') = 'present',
+    'FAIL: roster under auth.uid()';
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000022', false);
+  assert not exists (select 1 from session_roster(v_s)), 'FAIL: other center sees the roster under auth.uid()';
+  raise notice 'PASS: sessions, marks and rosters under auth.uid() stay within the center';
+end $$;

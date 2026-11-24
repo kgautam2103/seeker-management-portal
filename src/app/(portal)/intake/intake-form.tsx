@@ -5,7 +5,7 @@ import { ISO_CODES } from "@/lib/normalize/country";
 import { US_STATES } from "@/lib/normalize/us-state";
 import { fieldErrorsOf, seekerIntakeSchema, type ContactCheck, type FieldErrors } from "@/modules/seekers/schema";
 import type { IntakeOptions } from "@/modules/seekers/queries";
-import type { OutboxItem } from "@/offline/db";
+import { isSeekerItem, type SeekerOutboxItem } from "@/offline/db";
 import { drainOutbox, enqueueSeeker, removeItem } from "@/offline/outbox";
 import { useOutbox } from "@/offline/use-outbox";
 
@@ -55,13 +55,21 @@ const countryNames = (() => {
 const inputClass =
   "w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-base aria-[invalid=true]:border-red-600 focus:outline-2 focus:outline-indigo-600";
 
-export function IntakeForm({ options }: { options: IntakeOptions }) {
-  const [form, setForm] = useState<FormState>(() => blankForm(options));
+export type IntakeDefaults = { centerId?: string; programId?: string };
+
+export function IntakeForm({ options, defaults }: { options: IntakeOptions; defaults?: IntakeDefaults }) {
+  const [form, setForm] = useState<FormState>(() => {
+    // Opened from a roster ("someone new?"): start on that session's center and program.
+    const program = options.programs.find((p) => p.id === defaults?.programId);
+    return blankForm(options, program ? { centerId: program.centerId, programId: program.id } : { centerId: defaults?.centerId });
+  });
   const [errors, setErrors] = useState<FieldErrors & { form?: string }>({});
   const [check, setCheck] = useState<ContactCheck | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
-  const { items, online, ready } = useOutbox();
+  const outbox = useOutbox();
+  const { online, ready } = outbox;
+  const items = useMemo(() => outbox.items.filter(isSeekerItem), [outbox.items]);
 
   const programs = useMemo(
     () => options.programs.filter((p) => p.centerId === form.centerId),
@@ -133,7 +141,7 @@ export function IntakeForm({ options }: { options: IntakeOptions }) {
     void drainOutbox({ force: true });
   }
 
-  function editItem(item: OutboxItem) {
+  function editItem(item: SeekerOutboxItem) {
     if (!item.payload) return;
     const p = item.payload;
     setForm({
@@ -405,10 +413,10 @@ function RecentEntries({
   online,
   onEdit,
 }: {
-  items: OutboxItem[];
+  items: SeekerOutboxItem[];
   ready: boolean;
   online: boolean;
-  onEdit: (item: OutboxItem) => void;
+  onEdit: (item: SeekerOutboxItem) => void;
 }) {
   if (!ready || items.length === 0) return null;
   const waiting = items.filter((i) => i.status === "pending").length;
@@ -454,7 +462,7 @@ function RecentEntries({
   );
 }
 
-function StatusBadge({ item }: { item: OutboxItem }) {
+function StatusBadge({ item }: { item: SeekerOutboxItem }) {
   const [label, cls] =
     item.status === "pending"
       ? ["Waiting to send", "bg-zinc-100 text-zinc-700"]
@@ -468,7 +476,7 @@ function StatusBadge({ item }: { item: OutboxItem }) {
   return <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{label}</span>;
 }
 
-function StatusDetail({ item }: { item: OutboxItem }) {
+function StatusDetail({ item }: { item: SeekerOutboxItem }) {
   if (item.status === "pending") {
     return item.lastError ? <span className="text-zinc-600">{item.lastError}</span> : null;
   }

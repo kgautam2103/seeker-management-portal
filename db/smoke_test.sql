@@ -156,4 +156,86 @@ begin
   raise notice 'PASS: volunteers see and flag only same-center duplicate pairs';
 end $$;
 
+-- Attendance & remarks (R5)
+do $$
+declare
+  v_prog uuid := '00000000-0000-0000-0000-000000000041';
+  v_s1 uuid; v_s2 uuid; r jsonb; v_row record;
+begin
+  perform set_config('app.user_id', '00000000-0000-0000-0000-000000000099', false);
+  insert into program (id, center_id, kind, name, default_start_time)
+    values (v_prog, '00000000-0000-0000-0000-000000000011', 'weekly', 'Tuesday meditation', '19:00');
+  insert into registration (seeker_id, program_id, center_id, source)
+    values ('00000000-0000-0000-0000-000000000031', v_prog, '00000000-0000-0000-0000-000000000011', 'import');
+
+  perform set_config('app.user_id', '00000000-0000-0000-0000-000000000021', false);
+  v_s1 := start_session(v_prog, current_date - 7);
+  assert start_session(v_prog, current_date - 7) = v_s1, 'FAIL: start_session opened a second session for the same day';
+  v_s2 := start_session(v_prog, current_date);
+  assert v_s2 <> v_s1, 'FAIL: start_session reused another day''s session';
+  raise notice 'PASS: start_session opens one session per program per day';
+
+  select * into v_row from session_roster(v_s1) where seeker_id = '00000000-0000-0000-0000-000000000031';
+  assert v_row.registered and v_row.status is null and v_row.is_new, 'FAIL: roster before marking: ' || row_to_json(v_row)::text;
+
+  r := mark_attendance(jsonb_build_object('client_mutation_id', '00000000-0000-0000-0000-0000000000c1', 'session_id', v_s1,
+         'seeker_id', '00000000-0000-0000-0000-000000000031', 'status', 'present', 'marked_at', now() - interval '1 hour'));
+  assert r->>'outcome' = 'recorded' and (r->>'first_visit')::boolean, 'FAIL: first mark: ' || r::text;
+  r := mark_attendance(jsonb_build_object('client_mutation_id', '00000000-0000-0000-0000-0000000000c1', 'session_id', v_s1,
+         'seeker_id', '00000000-0000-0000-0000-000000000031', 'status', 'present'));
+  assert r->>'outcome' = 'already_applied', 'FAIL: replayed mark was not a no-op: ' || r::text;
+  assert (select status from session where id = v_s1) = 'held', 'FAIL: marking present did not mark the session held';
+  raise notice 'PASS: mark_attendance records a first visit and a replay is a no-op';
+
+  -- A tap made earlier on a phone that was offline loses to the newer mark, and the loss is logged.
+  perform set_config('app.user_id', '00000000-0000-0000-0000-000000000099', false);
+  r := mark_attendance(jsonb_build_object('client_mutation_id', '00000000-0000-0000-0000-0000000000c2', 'session_id', v_s1,
+         'seeker_id', '00000000-0000-0000-0000-000000000031', 'status', 'absent', 'marked_at', now() - interval '2 hours'));
+  assert r->>'outcome' = 'superseded' and r->>'status' = 'present', 'FAIL: older mark overwrote a newer one: ' || r::text;
+  assert exists (select 1 from audit_log where action = 'attendance.superseded'), 'FAIL: losing mark not in audit_log';
+  r := mark_attendance(jsonb_build_object('client_mutation_id', '00000000-0000-0000-0000-0000000000c3', 'session_id', v_s1,
+         'seeker_id', '00000000-0000-0000-0000-000000000031', 'status', 'absent'));
+  assert r->>'outcome' = 'recorded' and r->>'status' = 'absent', 'FAIL: newer mark did not win: ' || r::text;
+  assert exists (select 1 from audit_log where action = 'attendance.overridden'), 'FAIL: overridden mark not in audit_log';
+  r := mark_attendance(jsonb_build_object('client_mutation_id', '00000000-0000-0000-0000-0000000000c4', 'session_id', v_s1,
+         'seeker_id', '00000000-0000-0000-0000-000000000031', 'status', 'present'));
+  assert (select count(*) from attendance where session_id = v_s1) = 1, 'FAIL: marks did not converge on one row';
+  raise notice 'PASS: marks converge on one row, later tap wins, losing versions are audited';
+
+  perform set_config('app.user_id', '00000000-0000-0000-0000-000000000021', false);
+  select * into v_row from session_roster(v_s2) where seeker_id = '00000000-0000-0000-0000-000000000031';
+  assert not v_row.is_new, 'FAIL: a seeker who attended last week shows as new';
+  raise notice 'PASS: roster shows returning seekers as not new';
+
+  r := add_remark(jsonb_build_object('client_mutation_id', '00000000-0000-0000-0000-0000000000d1', 'session_id', v_s2,
+         'seeker_id', '00000000-0000-0000-0000-000000000031', 'body', '  Asked about the weekend program ',
+         'tags', jsonb_build_array('Interested', 'interested ', '')));
+  assert r->>'outcome' = 'created', 'FAIL: add_remark: ' || r::text;
+  assert (select tags from remark where client_mutation_id = '00000000-0000-0000-0000-0000000000d1') = '{interested}',
+    'FAIL: remark tags not normalized';
+  assert add_remark(jsonb_build_object('client_mutation_id', '00000000-0000-0000-0000-0000000000d1', 'session_id', v_s2,
+         'seeker_id', '00000000-0000-0000-0000-000000000031', 'body', 'x'))->>'outcome' = 'already_applied',
+    'FAIL: replayed remark was not a no-op';
+  assert (select remark_count from session_roster(v_s2) where seeker_id = '00000000-0000-0000-0000-000000000031') = 1,
+    'FAIL: roster remark count';
+  raise notice 'PASS: add_remark saves once with normalized tags';
+
+  perform set_config('app.user_id', '00000000-0000-0000-0000-000000000022', false);
+  assert not exists (select 1 from session_roster(v_s2)), 'FAIL: other center sees the roster';
+  assert not exists (select 1 from recent_sessions() where session_id = v_s2), 'FAIL: other center sees the session';
+  assert not exists (select 1 from remark), 'FAIL: other center sees remarks';
+  begin
+    perform mark_attendance(jsonb_build_object('client_mutation_id', '00000000-0000-0000-0000-0000000000c5', 'session_id', v_s2,
+              'seeker_id', '00000000-0000-0000-0000-000000000031', 'status', 'present'));
+    raise exception 'FAIL: other center marked attendance';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform start_session(v_prog, current_date);
+    raise exception 'FAIL: other center started a session';
+  exception when insufficient_privilege then null;
+  end;
+  raise notice 'PASS: other centers cannot see or change sessions, rosters or remarks';
+end $$;
+
 rollback;
