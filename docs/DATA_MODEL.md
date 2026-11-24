@@ -290,6 +290,8 @@ RLS is enabled on every center-scoped table. Three helper functions do the work:
 - `visible_center_ids()` — the set of centers the current user may see: all centers for `admin`; the user's assigned centers for `volunteer_coordinator` and `instructor`; every center in the region for `regional_coordinator`.
 - `center_visible(center_id)` — true when the center is in that set, **or** when `center_id` is null and the user is an admin. Null means "not assigned yet" (an unassigned seeker, a global campaign) and is deliberately admin-only until someone sets it.
 
+`seeker` itself is scoped by `home_center_id`. Tables without their own `center_id` follow the seeker: `consent` is visible when its seeker is, and a `duplicate_candidate` pair only when *both* seekers are, so a pair spanning two centers is for an admin to review (and the intake duplicate count shown to a volunteer covers only seekers they can see).
+
 Each scoped table gets one policy of the form:
 
 ```sql

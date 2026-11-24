@@ -48,3 +48,13 @@ begin
   assert r->>'outcome' = 'matched_other_center' and r->>'seeker_id' is null, 'FAIL: other-center intake match: ' || r::text;
   raise notice 'PASS: intake under auth.uid() creates and hides other-center matches';
 end $$;
+do $$
+declare r jsonb;
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000022', false);
+  r := intake_seeker('{"client_mutation_id":"00000000-0000-0000-0000-0000000000b3","center_id":"00000000-0000-0000-0000-000000000012",
+                       "full_name":"Mira Exampel","email":"mira.two@example.com","city":"Arlington","state":"VA"}');
+  assert (r->>'possible_duplicates')::int = 0, 'FAIL: duplicate count revealed another center''s seeker: ' || r::text;
+  assert not exists (select 1 from duplicate_candidate), 'FAIL: volunteer can see a cross-center duplicate pair';
+  raise notice 'PASS: cross-center duplicate pairs are hidden under auth.uid()';
+end $$;
